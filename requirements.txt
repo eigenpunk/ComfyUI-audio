@@ -1,3 +1,4 @@
+--index-url https://download.pytorch.org/whl/cu121
 
 # audiocraft stuff
 av
@@ -25,5 +26,4 @@ protobuf
 tortoise-tts
 deepspeed
 
---index-url https://download.pytorch.org/whl/cu121
 xformers
