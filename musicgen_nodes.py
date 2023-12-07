@@ -1,9 +1,10 @@
-import os
-from glob import glob
+import gc
 from typing import Optional
 
 import torch
 from audiocraft.models import MusicGen
+
+from .util import do_cleanup, move_object_tensors_to_device, obj_on_device,stack_audio_tensors, tensors_to, tensors_to_cpu
 
 
 MODEL_NAMES = [
@@ -22,6 +23,9 @@ MODEL_NAMES = [
 
 
 class MusicgenLoader:
+    def __init__(self):
+        self.model = None
+
     @classmethod
     def INPUT_TYPES(s):
         return {"required": {"model_name": (MODEL_NAMES,)}}
@@ -31,13 +35,20 @@ class MusicgenLoader:
     FUNCTION = "load"
     CATEGORY = "audio"
 
-    def load(self, model_name):
+    def load(self, model_name: str):
+        if self.model is not None:
+            # force move to cpu, delete/collect, clear cache
+            self.model = move_object_tensors_to_device(self.model, empty_cuda_cache=False)
+            del self.model
+            do_cleanup()
+            print("MusicgenLoader: unloaded model")
+
         print(f"MusicgenLoader: loading {model_name}")
 
         model_name = "facebook/" + model_name
-        model = MusicGen.get_pretrained(model_name)
-        sr = model.sample_rate
-        return model, sr
+        self.model = MusicGen.get_pretrained(model_name)
+        sr = self.model.sample_rate
+        return self.model, sr
 
 
 class MusicgenGenerate:
@@ -60,9 +71,7 @@ class MusicgenGenerate:
 
     RETURN_NAMES = ("RAW_AUDIO",)
     RETURN_TYPES = ("AUDIO_TENSOR",)
-
     FUNCTION = "generate"
-
     CATEGORY = "audio"
 
     def generate(
@@ -78,6 +87,11 @@ class MusicgenGenerate:
         seed: int = 0,
         audio: Optional[torch.Tensor] = None,
     ):
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        # empty string = unconditional generation
+        if text == "":
+            text = None
+
         model.set_generation_params(
             top_k=top_k,
             top_p=top_p,
@@ -85,28 +99,35 @@ class MusicgenGenerate:
             duration=duration,
             cfg_coef=cfg,
         )
-        if torch.cuda.is_available():
-            model.lm = model.lm.cuda()
-            model.compression_model = model.compression_model.cuda()
-        if text == "":
-            text = None
-        with torch.random.fork_rng():
+        with torch.random.fork_rng(), obj_on_device(model, dst=device, verbose_move=True) as m:
             torch.manual_seed(seed)
-            if audio is not None or text is not None:
-                batched_input = [text] * batch_size
-                audio_out = (
-                    model.generate_continuation(
-                        audio, model.sample_rate, batched_input, progress=True
-                    )
-                    if audio is not None
-                    else model.generate(batched_input, progress=True)
-                )
-            else:
-                audio_out = model.generate_unconditional(batch_size, progress=True)
-        model.lm = model.lm.cpu()
-        model.compression_model = model.compression_model.cpu()
+            text_input = [text] * batch_size
+            if audio is not None:
+                # do continuation with input audio and (optional) text prompting
+                if isinstance(audio, list):
+                    # left-padded stacking into batch tensor
+                    audio = stack_audio_tensors(audio)
 
-        return audio_out.cpu(),
+                if audio.shape[0] < batch_size:
+                    # (try to) expand batch if smaller than requested
+                    audio = audio.expand(batch_size, -1, -1)
+                elif audio.shape[0] > batch_size:
+                    # truncate batch if larger than requested
+                    audio = audio[:batch_size]
+
+                audio_input = tensors_to(audio, device)
+                audio_out = m.generate_continuation(audio_input, model.sample_rate, text_input, progress=True)
+            elif text is not None:
+                # do text-to-music
+                audio_out = m.generate(text_input, progress=True)
+            else:
+                # do unconditional music generation
+                audio_out = m.generate_unconditional(batch_size, progress=True)
+
+            audio_out = tensors_to_cpu(audio_out)
+
+        do_cleanup()
+        return audio_out,
 
 
 NODE_CLASS_MAPPINGS = {

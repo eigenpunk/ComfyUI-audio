@@ -15,25 +15,24 @@ class ConvertAudio:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "src": ("AUDIO_TENSOR",),
-                "src_rate": ("INT", {"default": 44100}),
+                "audio": ("AUDIO_TENSOR",),
+                "from_rate": ("INT", {"default": 44100}),
                 "to_rate": ("INT", {"default": 32000}),
                 "to_channels": ("INT", {"default": 1, "min": 1, "max": 2, "step": 1}),
             }
         }
 
     RETURN_TYPES = ("AUDIO_TENSOR",)
-
     FUNCTION = "convert"
-
     CATEGORY = "audio"
 
-    def convert(self, src, src_rate, to_rate, to_channels):
-        expand_dim = src.dim() == 2
-        if expand_dim:
-            src = src.unsqueeze(0)
-        dst = convert_audio(src, src_rate, to_rate, to_channels)
-        return (dst.squeeze(0) if expand_dim else dst,)
+    def convert(self, audio, from_rate, to_rate, to_channels):
+        for i, clip in enumerate(audio):
+            expand_dim = len(clip.shape) == 2
+            if expand_dim: clip = clip.unsqueeze(0)
+            conv_clip = convert_audio(clip, from_rate, to_rate, to_channels)
+            audio[i] = conv_clip.squeeze(0) if expand_dim else conv_clip
+        return audio,
 
 
 class SaveAudio:
@@ -57,13 +56,9 @@ class SaveAudio:
             },
         }
 
-    # RETURN_TYPES = ("AUDIO",)
     RETURN_TYPES = ()
-
     FUNCTION = "save_audio"
-
     OUTPUT_NODE = True
-
     CATEGORY = "audio"
 
     def save_audio(
@@ -94,14 +89,12 @@ class SaveAudio:
             name = f"{base_fname}_{count:05}_"
             stem_name = os.path.join(full_outdir, name)
             path = audio_write(stem_name, clip, sr, format=file_format)
-            print(name, stem_name, path)
             result = {
                 "filename": path.name,
                 "subfolder": subdir,
                 "type": self.output_type,
                 "format": mimetype,
             }
-            print(result)
             results.append(result)
             count += 1
 

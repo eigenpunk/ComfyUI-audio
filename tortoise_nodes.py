@@ -3,9 +3,10 @@ import os
 
 import torch
 
-from .util import models_dir
+from .util import do_cleanup, models_dir, move_object_tensors_to_device, obj_on_device
 
-VOICES_PATH = os.path.join(models_dir, "tortoise", "voices")
+MODELS_PATH = os.path.join(models_dir, "tortoise")
+VOICES_PATH = os.path.join(MODELS_PATH, "voices")
 
 os.makedirs(VOICES_PATH, exist_ok=True)
 
@@ -17,6 +18,11 @@ VOICES = get_voices(extra_voice_dirs=[VOICES_PATH])
 
 
 class TortoiseTTSLoader:
+    """
+    loads the Tortoise TTS "model", which is actually just the tortoise tts api
+
+    TODO: figure out why deepspeed no work
+    """
     def __init__(self):
         self.model = None
 
@@ -25,7 +31,7 @@ class TortoiseTTSLoader:
         return {
             "required": {
                 "kv_cache": ("BOOLEAN", {"default": True}),
-                "use_deepspeed": ("BOOLEAN", {"default": True}),
+                # "use_deepspeed": ("BOOLEAN", {"default": True}),
                 "half": ("BOOLEAN", {"default": True}),
                 "use_fast_api": ("BOOLEAN", {"default": False}),
             }
@@ -36,29 +42,38 @@ class TortoiseTTSLoader:
     FUNCTION = "load"
     CATEGORY = "audio"
 
-    def load(self, kv_cache=False, use_deepspeed=False, half=False, use_fast_api=False):
+    def load(self, kv_cache=False, half=False, use_fast_api=False):
         if self.model is not None:
+            self.model = move_object_tensors_to_device(self.model, empty_cuda_cache=False)
             del self.model
-            gc.collect()
+            do_cleanup()
+            print("TortoiseTTSLoader: unloaded model")
 
-        kwargs = {"kv_cache": kv_cache, "use_deepspeed": use_deepspeed, "half": half}
+        print("TortoiseTTSLoader: loading model")
+        kwargs = {"kv_cache": kv_cache, "use_deepspeed": False, "half": half}
         self.model = (
-            api_fast.TextToSpeech(**kwargs) if use_fast_api else api.TextToSpeech(**kwargs)
+            api_fast.TextToSpeech(**kwargs, models_dir=MODELS_PATH)
+            if use_fast_api
+            else api.TextToSpeech(**kwargs, models_dir=MODELS_PATH)
         )
 
-        return (self.model,)
+        return self.model,
 
 
 class TortoiseTTSGenerate:
+    """
+    generates speech from text using tortoise. custom voices are supported; just add short clips of speech to a
+    subdirectory of "ComfyUI/models/tortoise/voices".
+    """
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
                 "model": ("TORTOISE_TTS",),
                 "voice": (["random", *list(VOICES.keys())],),
-                "text": ("STRING", {"default": "i'll see you in the shower", "multiline": True}),
+                "text": ("STRING", {"default": "hello world", "multiline": True}),
                 "batch_size": ("INT", {"default": 1, "min": 1}),
-                "num_autoregressive_samples": ("INT", {"default": 512, "min": 0, "max": 10000, "step": 1}),
+                "num_autoregressive_samples": ("INT", {"default": 80, "min": 0, "max": 10000, "step": 1}),
                 "temperature": ("FLOAT", {"default": 1.0, "min": 0.001, "step": 0.001}),
                 "length_penalty": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.001}),
                 "repetition_penalty": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.001}),
@@ -71,7 +86,6 @@ class TortoiseTTSGenerate:
                 "diffusion_temperature": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "seed": ("INT", {"default": 0, "min": 0}),
             },
-            # "optional": {"audio": ("AUDIO_TENSOR",)},
         }
 
     RETURN_NAMES = ("RAW_AUDIO",)
@@ -87,7 +101,7 @@ class TortoiseTTSGenerate:
         text: str = "",
         voice: str = "random",
         batch_size: int = 1,
-        num_autoregressive_samples: int = 512,
+        num_autoregressive_samples: int = 80,
         temperature: float = 1.0,
         length_penalty: float = 1.0,
         repetition_penalty: float = 2.0,
@@ -100,6 +114,7 @@ class TortoiseTTSGenerate:
         diffusion_temperature: float = 1.0,
         seed: int = 0,
     ):
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         voice_samples, voice_latents = load_voice(voice, extra_voice_dirs=[VOICES_PATH])
         kwargs = dict(
             voice_samples=voice_samples,
@@ -119,16 +134,22 @@ class TortoiseTTSGenerate:
             diffusion_temperature=diffusion_temperature,
             use_deterministic_seed=seed,
         )
+
         # fast api excludes diffusion parameters
         if isinstance(model, api_fast.TextToSpeech):
             for k in ["diffusion_iterations", "cond_free", "cond_free_k", "diffusion_temperature"]:
                 kwargs.pop(k)
 
-        with torch.random.fork_rng():
+        with torch.random.fork_rng(), obj_on_device(model, dst=device) as m:
             torch.manual_seed(seed)
-            audio_out = model.tts(text, **kwargs)
+            audio_out = m.tts(text, **kwargs)
+            if batch_size > 1:
+                audio_out = [x.squeeze(0).cpu() for x in audio_out]
+            else:
+                audio_out = [audio_out.squeeze(0).cpu()]
 
-        return (audio_out,)
+        do_cleanup()
+        return audio_out,
 
 
 NODE_CLASS_MAPPINGS = {
