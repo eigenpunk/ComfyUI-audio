@@ -1,11 +1,12 @@
 # ComfyUI-audio
 
-generative audio tools for ComfyUI. highly experimental&mdash;expect things to break.
+generative audio tools for ComfyUI. highly experimental&mdash;expect things to break and/or change frequently.
 
 ## features
-- [musicgen](https://facebookresearch.github.io/audiocraft/docs/MUSICGEN.html)
+- [musicgen text-to-music](https://facebookresearch.github.io/audiocraft/docs/MUSICGEN.html)
     - audiocraft and transformers implementations
-- [tortoise tts](https://github.com/neonbjb/tortoise-tts)
+    - supports audio continuation, unconditional generation
+- [tortoise text-to-speech](https://github.com/neonbjb/tortoise-tts)
 - audio utility nodes
     - save audio, convert audio
 
