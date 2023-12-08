@@ -4,7 +4,11 @@ from typing import Optional
 from transformers import MusicgenForConditionalGeneration, MusicgenProcessor
 
 from .util import do_cleanup, move_object_tensors_to_device, obj_on_device, on_device, tensors_to_cpu, tensors_to
-from .musicgen_nodes import MODEL_NAMES
+from .musicgen_nodes import MODEL_NAMES as _ACM_MODEL_NAMES
+
+
+# remove unsupported audiogen models from list
+MODEL_NAMES = [x for x in _ACM_MODEL_NAMES if "audiogen" not in x]
 
 
 class MusicgenHFLoader:

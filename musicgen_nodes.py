@@ -12,13 +12,13 @@ MODEL_NAMES = [
     "musicgen-melody",
     "musicgen-large",
     "musicgen-melody-large",
-    "audiogen-medium",
     # TODO: stereo models seem not to be working out of the box
     # "musicgen-stereo-small",
     # "musicgen-stereo-medium",
     # "musicgen-stereo-melody",
     # "musicgen-stereo-large",
     # "musicgen-stereo-melody-large",
+    "audiogen-medium",
 ]
 
 
