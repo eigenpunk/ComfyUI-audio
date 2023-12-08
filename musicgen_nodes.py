@@ -1,8 +1,7 @@
-import gc
-from typing import Optional
+from typing import Optional, Union
 
 import torch
-from audiocraft.models import MusicGen
+from audiocraft.models import AudioGen, MusicGen
 
 from .util import do_cleanup, move_object_tensors_to_device, obj_on_device,stack_audio_tensors, tensors_to, tensors_to_cpu
 
@@ -13,6 +12,7 @@ MODEL_NAMES = [
     "musicgen-melody",
     "musicgen-large",
     "musicgen-melody-large",
+    "audiogen-medium",
     # TODO: stereo models seem not to be working out of the box
     # "musicgen-stereo-small",
     # "musicgen-stereo-medium",
@@ -46,7 +46,9 @@ class MusicgenLoader:
         print(f"MusicgenLoader: loading {model_name}")
 
         model_name = "facebook/" + model_name
-        self.model = MusicGen.get_pretrained(model_name)
+        model_class = AudioGen if "audiogen" in model_name else MusicGen
+
+        self.model = model_class.get_pretrained(model_name)
         sr = self.model.sample_rate
         return self.model, sr
 
@@ -76,7 +78,7 @@ class MusicgenGenerate:
 
     def generate(
         self,
-        model: MusicGen,
+        model: Union[AudioGen, MusicGen],
         text: str = "",
         batch_size: int = 1,
         duration: int = 10,
