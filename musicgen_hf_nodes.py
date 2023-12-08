@@ -41,6 +41,9 @@ class MusicgenHFLoader:
         return self.model, self.processor, sr
 
 
+MILLISECONDS_PER_TOKEN = 20
+
+
 class MusicgenHFGenerate:
     @classmethod
     def INPUT_TYPES(s):
@@ -50,7 +53,7 @@ class MusicgenHFGenerate:
                 "processor": ("MUSICGEN_HF_PROC",),
                 "text": ("STRING", {"multiline": True, "default": ""}),
                 "batch_size": ("INT", {"default": 1, "min": 1}),
-                "max_new_tokens": ("INT", {"default": 256, "min": 32, "max": 2048, "step": 1}),
+                "duration": ("FLOAT", {"default": 10.0, "min": 1.0, "max": 300.0, "step": 0.01}),
                 "cfg": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.01}),
                 "top_k": ("INT", {"default": 0, "min": 0, "max": 10000, "step": 1}),
                 "top_p": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.001}),
@@ -71,7 +74,7 @@ class MusicgenHFGenerate:
         processor: MusicgenProcessor,
         text: str = "",
         batch_size: int = 1,
-        max_new_tokens: int = 256,
+        duration: float = 10.0,
         cfg: float = 1.0,
         top_k: int = 0,
         top_p: float = 1.0,
@@ -86,6 +89,8 @@ class MusicgenHFGenerate:
         # empty string = unconditional generation
         if text == "":
             text = None
+
+        max_new_tokens = int(duration * 1000.0 / MILLISECONDS_PER_TOKEN)
 
         with (
             torch.random.fork_rng(),
