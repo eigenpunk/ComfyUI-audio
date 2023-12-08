@@ -3,7 +3,7 @@
 generative audio tools for ComfyUI. highly experimental&mdash;expect things to break and/or change frequently.
 
 ## features
-- [musicgen text-to-music](https://facebookresearch.github.io/audiocraft/docs/MUSICGEN.html)
+- [musicgen text-to-music + audiogen text-to-sound](https://facebookresearch.github.io/audiocraft/docs/MUSICGEN.html)
     - audiocraft and transformers implementations
     - supports audio continuation, unconditional generation
 - [tortoise text-to-speech](https://github.com/neonbjb/tortoise-tts)
@@ -24,6 +24,7 @@ pip install -U audiocraft --no-deps
 ## would be nice to have maybe
 - audio uploads
 - audio previews
+- prompt weights for text-to-music/audio
 - stereo musicgen
 - ~~audiogen~~
 - multi-band diffusion
