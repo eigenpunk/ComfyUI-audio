@@ -3,7 +3,7 @@ from typing import Optional
 
 from transformers import MusicgenForConditionalGeneration, MusicgenProcessor
 
-from .util import do_cleanup, move_object_tensors_to_device, obj_on_device, on_device, tensors_to_cpu, tensors_to
+from .util import do_cleanup, object_to, obj_on_device, on_device, tensors_to_cpu, tensors_to
 from .musicgen_nodes import MODEL_NAMES as _ACM_MODEL_NAMES
 
 
@@ -27,8 +27,8 @@ class MusicgenHFLoader:
 
     def load(self, model_name: str):
         if self.model is not None:
-            self.model = move_object_tensors_to_device(self.model, empty_cuda_cache=False)
-            self.processor = move_object_tensors_to_device(self.processor, empty_cuda_cache=False)
+            self.model = object_to(self.model, empty_cuda_cache=False)
+            self.processor = object_to(self.processor, empty_cuda_cache=False)
             del self.model, self.processor
             do_cleanup()
             print("MusicgenHFLoader: unloaded model")

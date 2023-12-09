@@ -9,7 +9,6 @@ from torch.nn.functional import pad
 
 # TODO: this sucks
 COMFY_PATH = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", ".."))
-sys.path.insert(0, COMFY_PATH)
 
 from folder_paths import (
     models_dir,
@@ -25,37 +24,11 @@ def do_cleanup(cuda_cache=True):
         torch.cuda.empty_cache()
 
 
-def stack_audio_tensors(tensors, mode="pad"):
-    # assert all(len(x.shape) == 2 for x in tensors)
-    sizes = [x.shape[-1] for x in tensors]
-
-    if mode in {"pad_l", "pad_r", "pad"}:
-        # pad input tensors to be equal length
-        dst_size = max(sizes)
-        stack_tensors = (
-            [pad(x, pad=(0, dst_size - x.shape[-1])) for x in tensors]
-            if mode == "pad_r"
-            else [pad(x, pad=(dst_size - x.shape[-1], 0)) for x in tensors]
-        )
-    elif mode in {"trunc_l", "trunc_r", "trunc"}:
-        # truncate input tensors to be equal length
-        dst_size = min(sizes)
-        stack_tensors = (
-            [x[:, x.shape[-1] - dst_size:] for x in tensors]
-            if mode == "trunc_r"
-            else [x[:, :dst_size] for x in tensors]
-        )
-    else:
-        assert False, 'unknown mode "{pad}"'
-
-    return torch.stack(stack_tensors)
-
-
 def tensors_to(tensors, device):
     if isinstance(tensors, torch.Tensor):
         return tensors.to(device)
     if hasattr(tensors, "__dict__"):
-        return move_object_tensors_to_device(tensors, device, empty_cuda_cache=False)
+        return object_to(tensors, device, empty_cuda_cache=False)
     if isinstance(tensors, list):
         return [tensors_to(x, device) for x in tensors]
     if isinstance(tensors, dict):
@@ -73,7 +46,7 @@ def tensors_to_cpu(tensors):
     return tensors_to(tensors, "cpu")
 
 
-def move_object_tensors_to_device(obj, device=None, exclude=None, empty_cuda_cache=True, verbose=False):
+def object_to(obj, device=None, exclude=None, empty_cuda_cache=True, verbose=False):
     """
     recurse through an object and move any pytorch tensors/parameters/modules to the given device.
     if device is None, cpu is used by default. if the device is a CUDA device and empty_cuda_cache is
@@ -114,9 +87,10 @@ def move_object_tensors_to_device(obj, device=None, exclude=None, empty_cuda_cac
 
 @contextmanager
 def obj_on_device(model, src="cpu", dst="cuda", empty_cuda_cache=True, verbose_move=False):
-    model = move_object_tensors_to_device(model, dst, empty_cuda_cache=empty_cuda_cache, verbose=verbose_move)
+    model = object_to(model, dst, empty_cuda_cache=empty_cuda_cache, verbose=verbose_move)
     yield model
-    model = move_object_tensors_to_device(model, src, empty_cuda_cache=empty_cuda_cache, verbose=verbose_move)
+    model = object_to(model, src, empty_cuda_cache=empty_cuda_cache, verbose=verbose_move)
+
 
 @contextmanager
 def on_device(model, src="cpu", dst="cuda", empty_cuda_cache=True, **kwargs):
@@ -125,3 +99,29 @@ def on_device(model, src="cpu", dst="cuda", empty_cuda_cache=True, **kwargs):
     model = model.to(src)
     if empty_cuda_cache:
         torch.cuda.empty_cache()
+
+
+def stack_audio_tensors(tensors, mode="pad"):
+    # assert all(len(x.shape) == 2 for x in tensors)
+    sizes = [x.shape[-1] for x in tensors]
+
+    if mode in {"pad_l", "pad_r", "pad"}:
+        # pad input tensors to be equal length
+        dst_size = max(sizes)
+        stack_tensors = (
+            [pad(x, pad=(0, dst_size - x.shape[-1])) for x in tensors]
+            if mode == "pad_r"
+            else [pad(x, pad=(dst_size - x.shape[-1], 0)) for x in tensors]
+        )
+    elif mode in {"trunc_l", "trunc_r", "trunc"}:
+        # truncate input tensors to be equal length
+        dst_size = min(sizes)
+        stack_tensors = (
+            [x[:, x.shape[-1] - dst_size:] for x in tensors]
+            if mode == "trunc_r"
+            else [x[:, :dst_size] for x in tensors]
+        )
+    else:
+        assert False, 'unknown mode "{pad}"'
+
+    return torch.stack(stack_tensors)

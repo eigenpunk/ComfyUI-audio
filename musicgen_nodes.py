@@ -3,7 +3,7 @@ from typing import Optional, Union
 import torch
 from audiocraft.models import AudioGen, MusicGen
 
-from .util import do_cleanup, move_object_tensors_to_device, obj_on_device,stack_audio_tensors, tensors_to, tensors_to_cpu
+from .util import do_cleanup, object_to, obj_on_device, stack_audio_tensors, tensors_to, tensors_to_cpu
 
 
 MODEL_NAMES = [
@@ -38,7 +38,7 @@ class MusicgenLoader:
     def load(self, model_name: str):
         if self.model is not None:
             # force move to cpu, delete/collect, clear cache
-            self.model = move_object_tensors_to_device(self.model, empty_cuda_cache=False)
+            self.model = object_to(self.model, empty_cuda_cache=False)
             del self.model
             do_cleanup()
             print("MusicgenLoader: unloaded model")

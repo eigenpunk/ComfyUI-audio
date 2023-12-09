@@ -1,9 +1,10 @@
 import gc
 import os
+from urllib.request import urlretrieve
 
 import torch
 
-from .util import do_cleanup, models_dir, move_object_tensors_to_device, obj_on_device
+from .util import do_cleanup, models_dir, object_to, obj_on_device
 
 MODELS_PATH = os.path.join(models_dir, "tortoise")
 VOICES_PATH = os.path.join(MODELS_PATH, "voices")
@@ -11,10 +12,39 @@ VOICES_PATH = os.path.join(MODELS_PATH, "voices")
 os.makedirs(VOICES_PATH, exist_ok=True)
 
 from tortoise import api, api_fast
+from tortoise.models.cvvp import CVVP
 from tortoise.utils.audio import get_voices, load_voice
 
 
 VOICES = get_voices(extra_voice_dirs=[VOICES_PATH])
+
+
+def _load_cvvp(self):
+    self.cvvp = CVVP(
+        model_dim=512,
+        transformer_heads=8,
+        dropout=0,
+        mel_codes=8192,
+        conditioning_enc_depth=8,
+        cond_mask_percentage=0,
+        speech_enc_depth=8,
+        speech_mask_percentage=0,
+        latent_multiplier=1,
+    )
+    self.cvvp.eval()
+    ckpt_path = os.path.join(MODELS_PATH, "cvvp.pth")
+    if not os.path.exists(ckpt_path):
+        urlretrieve(api.MODELS["cvvp.pth"], ckpt_path)
+    cvvp_sd = torch.load(ckpt_path, map_location="cpu")
+    self.cvvp.load_state_dict(cvvp_sd)
+
+
+class TextToSpeech(api.TextToSpeech):
+    load_cvvp = _load_cvvp
+
+
+class FastTextToSpeech(api_fast.TextToSpeech):
+    load_cvvp = _load_cvvp
 
 
 class TortoiseTTSLoader:
@@ -44,7 +74,7 @@ class TortoiseTTSLoader:
 
     def load(self, kv_cache=False, half=False, use_fast_api=False):
         if self.model is not None:
-            self.model = move_object_tensors_to_device(self.model, empty_cuda_cache=False)
+            self.model = object_to(self.model, empty_cuda_cache=False)
             del self.model
             do_cleanup()
             print("TortoiseTTSLoader: unloaded model")
@@ -52,9 +82,9 @@ class TortoiseTTSLoader:
         print("TortoiseTTSLoader: loading model")
         kwargs = {"kv_cache": kv_cache, "use_deepspeed": False, "half": half}
         self.model = (
-            api_fast.TextToSpeech(**kwargs, models_dir=MODELS_PATH)
+            FastTextToSpeech(**kwargs, models_dir=MODELS_PATH)
             if use_fast_api
-            else api.TextToSpeech(**kwargs, models_dir=MODELS_PATH)
+            else TextToSpeech(**kwargs, models_dir=MODELS_PATH)
         )
 
         return self.model,
@@ -74,6 +104,7 @@ class TortoiseTTSGenerate:
                 "text": ("STRING", {"default": "hello world", "multiline": True}),
                 "batch_size": ("INT", {"default": 1, "min": 1}),
                 "num_autoregressive_samples": ("INT", {"default": 80, "min": 0, "max": 10000, "step": 1}),
+                "autoregressive_batch_size": ("INT", {"default": 0, "min": 0, "max": 1024, "step": 1}),
                 "temperature": ("FLOAT", {"default": 1.0, "min": 0.001, "step": 0.001}),
                 "length_penalty": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.001}),
                 "repetition_penalty": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.001}),
@@ -82,7 +113,7 @@ class TortoiseTTSGenerate:
                 "cvvp_amount": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "diffusion_steps": ("INT", {"default": 100, "min": 0, "max": 4000}),
                 "cond_free": ("BOOLEAN", {"default": True}),
-                "cond_free_k": ("FLOAT", {"default": 2.0, "min": 0.0}),
+                "cond_free_k": ("FLOAT", {"default": 2.0, "min": 0.0, "step": 0.01}),
                 "diffusion_temperature": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "seed": ("INT", {"default": 0, "min": 0}),
             },
@@ -102,6 +133,7 @@ class TortoiseTTSGenerate:
         voice: str = "random",
         batch_size: int = 1,
         num_autoregressive_samples: int = 80,
+        autoregressive_batch_size: int = 0,
         temperature: float = 1.0,
         length_penalty: float = 1.0,
         repetition_penalty: float = 2.0,
@@ -134,6 +166,10 @@ class TortoiseTTSGenerate:
             diffusion_temperature=diffusion_temperature,
             use_deterministic_seed=seed,
         )
+        if autoregressive_batch_size == 0:
+            autoregressive_batch_size = api.pick_best_batch_size_for_gpu()
+
+        model.autoregressive_batch_size = autoregressive_batch_size
 
         # fast api excludes diffusion parameters
         if isinstance(model, api_fast.TextToSpeech):
