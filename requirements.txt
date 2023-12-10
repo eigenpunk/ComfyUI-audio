@@ -1,3 +1,5 @@
+-e git+https://github.com/152334H/tortoise-tts-fast#egg=TorToiSe
+
 # audiocraft stuff
 av
 einops
@@ -22,8 +24,5 @@ encodec
 protobuf
 
 voicefixer2
-
-tortoise-tts
-deepspeed
 
 xformers
