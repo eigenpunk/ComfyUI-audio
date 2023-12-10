@@ -29,7 +29,7 @@ def tensors_to(tensors, device):
         return tensors.to(device)
     if hasattr(tensors, "__dict__"):
         return object_to(tensors, device, empty_cuda_cache=False)
-    if isinstance(tensors, list):
+    if isinstance(tensors, (list, tuple)):
         return [tensors_to(x, device) for x in tensors]
     if isinstance(tensors, dict):
         return {k: tensors_to(v, device) for k, v in tensors.items()}
