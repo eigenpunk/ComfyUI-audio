@@ -1,8 +1,17 @@
 import os
 import random
+import shutil
+import subprocess
+from matplotlib import pyplot as plt
+from torch import hann_window
 
+import torchaudio.functional as TAF
 from audiocraft.data.audio import audio_write
 from audiocraft.data.audio_utils import convert_audio
+from PIL import Image
+from PIL.PngImagePlugin import PngInfo
+
+from comfy.cli_args import args
 
 from .util import get_output_directory, get_temp_directory, get_save_image_path
 
@@ -125,16 +134,158 @@ class PreviewAudio(SaveAudio):
                 "extra_pnginfo": "EXTRA_PNGINFO",
             },
         }
+
+
+import math
+import numpy as np
+
+
+def logyscale(img_array):
+    height, width = img_array.shape[:2]
+
+    def _remap(x, y):
+        return min(int(math.log(x + 1) * height / math.log(height)), height - 1), min(y, width - 1)
+    v_remap = np.vectorize(_remap)
+
+    indices = np.meshgrid(np.arange(height), np.arange(width), indexing="ij")
+    indices = v_remap(*indices)
+    img_array = img_array[indices]
+
+    return img_array
+
+
+class SpectrogramImage:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "audio": ("AUDIO_TENSOR",),
+                "n_fft": ("INT", {"default": 200}),
+                "hop_len": ("INT", {"default": 50}),
+                "win_len": ("INT", {"default": 100}),
+                "power": ("FLOAT", {"default": 1.0}),
+                "normalized": ("BOOLEAN", {"default": False}),
+                "logy": ("BOOLEAN", {"default": True}),
+            },
+        }
     
+    RETURN_TYPES = ("IMAGE",)
+    FUNCTION = "save_spectrogram"
+    OUTPUT_NODE = True
+    CATEGORY = "audio"
+
+    def save_spectrogram(self, audio, n_fft=400, hop_len=50, win_len=100, power=1.0, normalized=False, logy=True):
+    # def save_spectrogram(self, audio, sr):
+        hop_len = n_fft // 4 if hop_len == 0 else hop_len
+        win_len = n_fft if win_len == 0 else win_len
+
+        results = []
+        for clip in audio:
+            spectro = TAF.spectrogram(
+                clip,
+                0,
+                window=hann_window(win_len),
+                n_fft=n_fft,
+                hop_length=hop_len,
+                win_length=win_len,
+                power=power,
+                normalized=normalized,
+                center=True,
+                pad_mode="reflect",
+                onesided=True,
+            )
+            spectro = spectro[0].flip(0)
+
+            if logy:
+                spectro = clip.new_tensor(logyscale(spectro.numpy()))
+                
+            results.append(spectro)
+            # img.save(full_name, pnginfo=meta, compress_level=self.compress_level)
+            # # path = audio_write(stem_name, clip, sr, format=file_format)
+            # result = {
+            #     "filename": full_name,
+            #     "subfolder": subdir,
+            #     "type": self.output_type,
+            # }
+            # results.append(result)
+            # count += 1
+
+        return results,
+
+
+class CombineImageWithAudio:
+    def __init__(self):
+        self.output_dir = get_output_directory()
+        self.output_type = "output"
+        self.prefix_append = ""
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "audio": ("AUDIO_TENSOR",),
+                "sr": ("INT", {"default": 32000}),
+                "filename_prefix": ("STRING", {"default": "ComfyUI"}),
+            },
+        }
+    
+    RETURN_TYPES = ()
+    FUNCTION = "save_image_with_audio"
+    OUTPUT_NODE = True
+    CATEGORY = "audio"
+
+    def save_image_with_audio(self, image, audio, sr, filename_prefix):
+        filename_prefix += self.prefix_append
+        dur = audio[0].shape[-1] // sr
+        channels = audio[0].shape[-2]
+        full_outdir, base_fname, count, subdir, filename_prefix = get_save_image_path(
+            filename_prefix, self.output_dir, dur, channels
+        )
+
+        results = []
+        for image_tensor, clip in zip(image, audio):
+            name = f"{base_fname}_{count:05}_"
+            stem_name = os.path.join(full_outdir, name)
+            audio_path = audio_write(stem_name, clip, sr, format="wav")
+
+            image = Image.fromarray(
+                image_tensor.mul(255.0).clip(0, 255).byte().numpy()
+            )
+            image_path = os.path.join(full_outdir, f"{name}.png")
+            image.save(image_path, compress_level=4)
+
+            video_path = os.path.join(full_outdir, f"{name}.webm")
+
+            proc_args = [
+                shutil.which("ffmpeg"), "-y", "-i", image_path, "-i", str(audio_path),
+                "-c:v", "vp8", "-c:a", "opus", "-strict", "-2", "-b:a", "255k", video_path
+            ]
+
+            subprocess.run(proc_args)
+            results.append({
+                "filename": name + ".webm",
+                "subfolder": subdir,
+                "type": self.output_type,
+                "format": "video/webm",
+            })
+            count += 1
+
+        return {"ui": {"clips": results}}
+
 
 NODE_CLASS_MAPPINGS = {
     "SaveAudio": SaveAudio,
     "ConvertAudio": ConvertAudio,
+    "SpectrogramImage": SpectrogramImage,
+    "CombineImageWithAudio": CombineImageWithAudio,
     # "PreviewAudio": PreviewAudio,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "SaveAudio": "Save Audio",
     "ConvertAudio": "Convert Audio",
+    "SpectrogramImage": "Spectrogram Image",
+    "CombineImageWithAudio": "Combine Image with Audio"
     # "PreviewAudio": "Preview Audio",
 }
