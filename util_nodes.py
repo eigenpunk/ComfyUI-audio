@@ -1,9 +1,11 @@
 import os
 import random
+from re import L
 import shutil
 import subprocess
 from matplotlib import pyplot as plt
 from torch import hann_window
+import torch
 
 import torchaudio.functional as TAF
 from audiocraft.data.audio import audio_write
@@ -13,7 +15,7 @@ from PIL.PngImagePlugin import PngInfo
 
 from comfy.cli_args import args
 
-from .util import get_output_directory, get_temp_directory, get_save_image_path
+from .util import get_device, get_output_directory, get_temp_directory, get_save_image_path, on_device
 
 
 class ConvertAudio:
@@ -274,11 +276,41 @@ class CombineImageWithAudio:
         return {"ui": {"clips": results}}
 
 
+class ApplyVoiceFixer:
+    def __init__(self):
+        self.model = None
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {"audio": ("AUDIO_TENSOR",),}
+        }
+    
+    FUNCTION = "apply"
+    RETURN_TYPES = ("AUDIO_TENSOR",)
+    CATEGORY = "audio"
+
+    def apply(self, audio):
+        device = get_device()
+        if self.model is None:
+            from voicefixer import VoiceFixer
+            self.model = VoiceFixer()
+
+        results = []
+        with on_device(self.model, dst=device) as model:
+            for clip in audio:
+                output = model.restore_inmem(clip.squeeze(0), cuda=device == "cuda")
+                results.append(clip.new_tensor(output))
+
+        return results,
+
+
 NODE_CLASS_MAPPINGS = {
     "SaveAudio": SaveAudio,
     "ConvertAudio": ConvertAudio,
     "SpectrogramImage": SpectrogramImage,
     "CombineImageWithAudio": CombineImageWithAudio,
+    "ApplyVoiceFixer": ApplyVoiceFixer,
     # "PreviewAudio": PreviewAudio,
 }
 
@@ -286,6 +318,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SaveAudio": "Save Audio",
     "ConvertAudio": "Convert Audio",
     "SpectrogramImage": "Spectrogram Image",
-    "CombineImageWithAudio": "Combine Image with Audio"
+    "CombineImageWithAudio": "Combine Image with Audio",
+    "ApplyVoiceFixer": "Apply VoiceFixer",
     # "PreviewAudio": "Preview Audio",
 }

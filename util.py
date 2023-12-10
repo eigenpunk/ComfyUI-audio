@@ -24,6 +24,10 @@ def do_cleanup(cuda_cache=True):
         torch.cuda.empty_cache()
 
 
+def get_device():
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
 def tensors_to(tensors, device):
     if isinstance(tensors, torch.Tensor):
         return tensors.to(device)

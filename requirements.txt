@@ -21,6 +21,8 @@ torchmetrics
 encodec
 protobuf
 
+voicefixer2
+
 tortoise-tts
 deepspeed
 
