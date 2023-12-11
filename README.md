@@ -9,7 +9,7 @@ generative audio tools for ComfyUI. highly experimental&mdash;expect things to b
 - [tortoise text-to-speech](https://github.com/neonbjb/tortoise-tts)
     - uses [152334h's fork](https://github.com/152334H/tortoise-tts-fast)
 - [vall-e x text-to-speech](https://github.com/Plachtaa/VALL-E-X)
-    - uses [https://github.com/korakoe/VALL-E-X](korakoe's fork)
+    - uses [korakoe's fork](https://github.com/korakoe/VALL-E-X)
 - [voicefixer2](https://github.com/voicefixer/voicefixer)
 - audio utility nodes
     - save audio, convert audio
