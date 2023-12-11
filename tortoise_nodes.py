@@ -1,45 +1,17 @@
-import gc
 import os
-from urllib.request import urlretrieve
 
 import torch
-
-from .util import do_cleanup, models_dir, object_to, obj_on_device
-
-MODELS_PATH = os.path.join(models_dir, "tortoise")
-VOICES_PATH = os.path.join(MODELS_PATH, "voices")
-
-os.makedirs(VOICES_PATH, exist_ok=True)
-
 from tortoise.api import TextToSpeech, pick_best_batch_size_for_gpu
 from tortoise.utils.audio import get_voices, load_voice
 
+from .util import do_cleanup, get_device, models_dir, object_to, obj_on_device
+
+
+MODELS_PATH = os.path.join(models_dir, "tortoise")
+VOICES_PATH = os.path.join(MODELS_PATH, "voices")
+os.makedirs(VOICES_PATH, exist_ok=True)
 
 VOICES = get_voices(extra_voice_dirs=[VOICES_PATH])
-
-
-# def _load_cvvp(self):
-#     self.cvvp = CVVP(
-#         model_dim=512,
-#         transformer_heads=8,
-#         dropout=0,
-#         mel_codes=8192,
-#         conditioning_enc_depth=8,
-#         cond_mask_percentage=0,
-#         speech_enc_depth=8,
-#         speech_mask_percentage=0,
-#         latent_multiplier=1,
-#     )
-#     self.cvvp.eval()
-#     ckpt_path = os.path.join(MODELS_PATH, "cvvp.pth")
-#     if not os.path.exists(ckpt_path):
-#         urlretrieve(api.MODELS["cvvp.pth"], ckpt_path)
-#     cvvp_sd = torch.load(ckpt_path, map_location="cpu")
-#     self.cvvp.load_state_dict(cvvp_sd)
-
-
-# class TextToSpeech(api.TextToSpeech):
-#     load_cvvp = _load_cvvp
 
 
 class TortoiseTTSLoader:
@@ -140,33 +112,14 @@ class TortoiseTTSGenerate:
         sampler: str = "p",
         seed: int = 0,
     ):
+        device = get_device()
         latent_averaging_mode = {
             "tortoise": 0,
             "global_windowed": 1,
             "global": 2,
         }[latent_averaging_mode]
-        device = "cuda" if torch.cuda.is_available() else "cpu"
         voice_samples, voice_latents = load_voice(voice, extra_voice_dirs=[VOICES_PATH])
-        kwargs = dict(
-            voice_samples=voice_samples,
-            conditioning_latents=voice_latents,
-            k=batch_size,
-            verbose=True,
-            latent_averaging_mode=latent_averaging_mode,
-            num_autoregressive_samples=num_autoregressive_samples,
-            temperature=temperature,
-            length_penalty=length_penalty,
-            repetition_penalty=repetition_penalty,
-            top_p=top_p,
-            max_mel_tokens=max_mel_tokens,
-            cvvp_amount=cvvp_amount,
-            diffusion_iterations=diffusion_steps,
-            cond_free=cond_free,
-            cond_free_k=cond_free_k,
-            diffusion_temperature=diffusion_temperature,
-            sampler=sampler,
-            use_deterministic_seed=seed,
-        )
+
         if autoregressive_batch_size == 0:
             autoregressive_batch_size = pick_best_batch_size_for_gpu()
 
@@ -176,7 +129,27 @@ class TortoiseTTSGenerate:
             prev_device = m.device
             m.device = device
             torch.manual_seed(seed)
-            audio_out = m.tts(text, **kwargs)
+            audio_out = m.tts(
+                text,
+                voice_samples=voice_samples,
+                conditioning_latents=voice_latents,
+                k=batch_size,
+                verbose=True,
+                latent_averaging_mode=latent_averaging_mode,
+                num_autoregressive_samples=num_autoregressive_samples,
+                temperature=temperature,
+                length_penalty=length_penalty,
+                repetition_penalty=repetition_penalty,
+                top_p=top_p,
+                max_mel_tokens=max_mel_tokens,
+                cvvp_amount=cvvp_amount,
+                diffusion_iterations=diffusion_steps,
+                cond_free=cond_free,
+                cond_free_k=cond_free_k,
+                diffusion_temperature=diffusion_temperature,
+                sampler=sampler,
+                use_deterministic_seed=seed,
+            )
             if batch_size > 1:
                 audio_out = [x.squeeze(0).cpu() for x in audio_out]
             else:
