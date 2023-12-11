@@ -15,7 +15,7 @@ from PIL.PngImagePlugin import PngInfo
 
 from comfy.cli_args import args
 
-from .util import get_device, get_output_directory, get_temp_directory, get_save_image_path, on_device
+from .util import do_cleanup, get_device, get_output_directory, get_temp_directory, get_save_image_path, on_device
 
 
 class ConvertAudio:
@@ -299,9 +299,10 @@ class ApplyVoiceFixer:
         results = []
         with on_device(self.model, dst=device) as model:
             for clip in audio:
-                output = model.restore_inmem(clip.squeeze(0), cuda=device == "cuda")
+                output = model.restore_inmem(clip.squeeze(0).numpy(), cuda=device == "cuda")
                 results.append(clip.new_tensor(output))
 
+        do_cleanup()
         return results,
 
 

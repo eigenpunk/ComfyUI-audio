@@ -90,10 +90,10 @@ def object_to(obj, device=None, exclude=None, empty_cuda_cache=True, verbose=Fal
 
 
 @contextmanager
-def obj_on_device(model, src="cpu", dst="cuda", empty_cuda_cache=True, verbose_move=False):
-    model = object_to(model, dst, empty_cuda_cache=empty_cuda_cache, verbose=verbose_move)
+def obj_on_device(model, src="cpu", dst="cuda", exclude=None, empty_cuda_cache=True, verbose_move=False):
+    model = object_to(model, dst, exclude=exclude, empty_cuda_cache=empty_cuda_cache, verbose=verbose_move)
     yield model
-    model = object_to(model, src, empty_cuda_cache=empty_cuda_cache, verbose=verbose_move)
+    model = object_to(model, src, exclude=exclude, empty_cuda_cache=empty_cuda_cache, verbose=verbose_move)
 
 
 @contextmanager

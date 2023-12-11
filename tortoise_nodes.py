@@ -28,9 +28,7 @@ class TortoiseTTSLoader:
         return {
             "required": {
                 "kv_cache": ("BOOLEAN", {"default": True}),
-                # "use_deepspeed": ("BOOLEAN", {"default": True}),
                 "high_vram": ("BOOLEAN", {"default": False}),
-                "use_fast_api": ("BOOLEAN", {"default": False}),
             }
         }
 
@@ -125,7 +123,10 @@ class TortoiseTTSGenerate:
 
         model.autoregressive_batch_size = autoregressive_batch_size
 
-        with torch.random.fork_rng(), obj_on_device(model, dst=device) as m:
+        with (
+            torch.random.fork_rng(),
+            obj_on_device(model, dst=device, exclude={"rlg_auto", "rlg_diffusion"}, verbose_move=True) as m
+        ):
             prev_device = m.device
             m.device = device
             torch.manual_seed(seed)

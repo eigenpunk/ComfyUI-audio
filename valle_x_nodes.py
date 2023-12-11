@@ -68,6 +68,7 @@ def generate_audio(
     accent="no-accent",
     topk=100,
     temperature=1.0,
+    best_of=8,
     length_penalty=1.0,
     use_vocos=True,
     device=None,
@@ -102,10 +103,11 @@ def generate_audio(
         text_tokens_lens.to(device),
         audio_prompts.to(device),
         enroll_x_lens=enroll_x_lens,
-        top_k=-topk,
+        top_k=topk,
         temperature=temperature,
         prompt_language=lang_pr,
         text_language=langs if accent == "no-accent" else lang,
+        best_of=best_of,
         length_penalty=length_penalty,
     )
 
@@ -196,6 +198,7 @@ class VALLEXGenerator:
                 # "mode": (["sliding-window", "fixed-prompt"]),
                 "temperature": ("FLOAT", {"default": 1.0, "min": 0.001, "step": 0.001}),
                 "topk": ("INT", {"default": 100, "step": 1}),
+                "best_of": ("INT", {"default": 8}),
                 "length_penalty": ("FLOAT", {"default": 1.0, "min": 0.0, "step": 0.001}),
                 "seed": ("INT", {"default": 0, "min": 0}),
             }
@@ -215,6 +218,7 @@ class VALLEXGenerator:
         accent: str = "none",
         temperature: float = 1.0,
         topk: int = 100,
+        best_of: int = 8,
         length_penalty: float = 1.0,
         seed: int = 0,
     ):
@@ -222,10 +226,7 @@ class VALLEXGenerator:
 
         accent = "no-accent" if accent == "none" else accent
 
-        with (
-            torch.random.fork_rng(),
-            obj_on_device(model, dst=device) as m
-        ):
+        with torch.random.fork_rng(), obj_on_device(model, dst=device) as m:
             torch.manual_seed(seed)
             audio = generate_audio(
                 m,
@@ -235,6 +236,7 @@ class VALLEXGenerator:
                 accent=accent,
                 topk=-topk,
                 temperature=temperature,
+                best_of=best_of,
                 length_penalty=length_penalty,
                 device=device,
             )

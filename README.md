@@ -7,6 +7,10 @@ generative audio tools for ComfyUI. highly experimental&mdash;expect things to b
     - audiocraft and transformers implementations
     - supports audio continuation, unconditional generation
 - [tortoise text-to-speech](https://github.com/neonbjb/tortoise-tts)
+    - uses [152334h's fork](https://github.com/152334H/tortoise-tts-fast)
+- [vall-e x text-to-speech](https://github.com/Plachtaa/VALL-E-X)
+    - uses [https://github.com/korakoe/VALL-E-X](korakoe's fork)
+- [voicefixer2](https://github.com/voicefixer/voicefixer)
 - audio utility nodes
     - save audio, convert audio
 
@@ -16,9 +20,9 @@ generative audio tools for ComfyUI. highly experimental&mdash;expect things to b
 cd ComfyUI/custom_nodes
 git clone https://github.com/eigenpunk/ComfyUI-audio
 cd ComfyUI-audio
-# pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cu118  # for cuda 11.8
 pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cu121  # for cuda 12.1
 pip install -U audiocraft --no-deps
+# pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cu118  # for cuda 11.8
 ```
 
 ## would be nice to have maybe
@@ -31,14 +35,13 @@ pip install -U audiocraft --no-deps
 - more/faster tts model support
     - [tacotron2](https://github.com/NVIDIA/tacotron2)
     - [vits](https://huggingface.co/docs/transformers/model_doc/vits)?
-    - [vall-e x](https://github.com/Plachtaa/VALL-E-X)?
+    - ~~[vall-e x](https://github.com/Plachtaa/VALL-E-X)~~
     <!-- 
     these implementations exist but seem not to have trained checkpoints:
     - [voicebox](https://github.com/lucidrains/voicebox-pytorch)?
     - [naturalspeech](https://github.com/lucidrains/naturalspeech2-pytorch)?
     -->
     - ???
-- fix cvvp for tortoise?
 - split generator nodes by model stages
     <!-- - for tortoise, could split the node into:
         - autoregressor
