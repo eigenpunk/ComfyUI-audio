@@ -1,21 +1,136 @@
+import math
 import os
 import random
-from re import L
 import shutil
 import subprocess
-from matplotlib import pyplot as plt
-from torch import hann_window
 import torch
+from torch import hann_window
 
+import numpy as np
 import torchaudio.functional as TAF
-from audiocraft.data.audio import audio_write
+from audiocraft.data.audio import audio_write, audio_read
 from audiocraft.data.audio_utils import convert_audio
 from PIL import Image
-from PIL.PngImagePlugin import PngInfo
 
 from comfy.cli_args import args
 
-from .util import do_cleanup, get_device, get_output_directory, get_temp_directory, get_save_image_path, on_device
+from .util import (
+    do_cleanup,
+    get_device,
+    get_output_directory,
+    get_temp_directory,
+    get_save_image_path,
+    on_device,
+)
+
+
+class LoadAudio:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {"path": ("STRING", {"default": ""})}}
+
+    RETURN_NAMES = ("AUDIO", "SR", "DURATION")
+    RETURN_TYPES = ("AUDIO_TENSOR", "INT", "FLOAT")
+    FUNCTION = "load"
+    CATEGORY = "audio"
+
+    def load(self, path):
+        if not os.path.isabs(path):
+            path = os.path.join(get_output_directory(), path)
+        audio, sr = audio_read(path)
+        return [audio], sr, audio.shape[-1] / sr
+
+
+class ClipAudio:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "audio": ("AUDIO_TENSOR",),
+                "sr": ("INT", {"default": 32000}),
+                "from_s": ("FLOAT", {"default": 0.0}),
+                "to_s": ("FLOAT", {"default": 0.0}),
+            }
+        }
+    
+    RETURN_NAMES = ("AUDIO",)
+    RETURN_TYPES = ("AUDIO_TENSOR",)
+    FUNCTION = "clip_audio"
+    CATEGORY = "audio"
+
+    def clip_audio(self, audio, sr, from_s, to_s):
+        from_sample = int(from_s * sr)
+        to_sample = int(to_s * sr)
+        clipped_audio = []
+        for a in audio:
+            a_clipped = a[..., from_sample:to_sample]
+            clipped_audio.append(a_clipped)
+        return clipped_audio,
+
+
+class FlattenAudioBatch:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {"audio_batch": ("AUDIO_TENSOR",)}}
+    
+    RETURN_NAMES = ("AUDIO",)
+    RETURN_TYPES = ("AUDIO_TENSOR",)
+    FUNCTION = "concat_audio"
+    CATEGORY = "audio"
+
+    def concat_audio(self, audio_batch):
+        return [torch.concat(audio_batch, dim=-1)],
+
+
+class ConcatAudio:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "batch1": ("AUDIO_TENSOR",),
+                "batch2": ("AUDIO_TENSOR",),
+            }
+        }
+    
+    RETURN_NAMES = ("AUDIO",)
+    RETURN_TYPES = ("AUDIO_TENSOR",)
+    FUNCTION = "concat_audio"
+    CATEGORY = "audio"
+
+    def concat_audio(self, batch1, batch2):
+        if len(batch1) == len(batch2) and len(batch2) == 1:
+            return torch.concat([batch1[0], batch2[0]], dim=-1)
+
+        b1 = batch1.copy()
+        b2 = batch2.copy()
+
+        if len(b1) == 1:
+            b1 = b1 * len(b2)
+        elif len(b2) == 1:
+            b2 = b2 * len(b1)
+
+        batch = [torch.concat([x1, x2], dim=-1) for x1, x2 in zip(b1, b2)]
+
+        return batch,
+
+
+class BatchAudio:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "batch1": ("AUDIO_TENSOR",),
+                "batch2": ("AUDIO_TENSOR",),
+            }
+        }
+    
+    RETURN_NAMES = ("AUDIO_BATCH",)
+    RETURN_TYPES = ("AUDIO_TENSOR",)
+    FUNCTION = "batch_audio"
+    CATEGORY = "audio"
+
+    def batch_audio(self, batch1, batch2):
+        return batch1 + batch2,
 
 
 class ConvertAudio:
@@ -138,10 +253,6 @@ class PreviewAudio(SaveAudio):
         }
 
 
-import math
-import numpy as np
-
-
 def logyscale(img_array):
     height, width = img_array.shape[:2]
 
@@ -222,7 +333,7 @@ class CombineImageWithAudio:
                 "filename_prefix": ("STRING", {"default": "ComfyUI"}),
             },
         }
-    
+
     RETURN_TYPES = ()
     FUNCTION = "save_image_with_audio"
     OUTPUT_NODE = True
@@ -276,9 +387,7 @@ class ApplyVoiceFixer:
 
     @classmethod
     def INPUT_TYPES(s):
-        return {
-            "required": {"audio": ("AUDIO_TENSOR",),}
-        }
+        return {"required": {"audio": ("AUDIO_TENSOR",),}}
     
     FUNCTION = "apply"
     RETURN_TYPES = ("AUDIO_TENSOR",)
@@ -301,8 +410,13 @@ class ApplyVoiceFixer:
 
 
 NODE_CLASS_MAPPINGS = {
+    "LoadAudio": LoadAudio,
     "SaveAudio": SaveAudio,
     "ConvertAudio": ConvertAudio,
+    "ClipAudio": ClipAudio,
+    "ConcatAudio": ConcatAudio,
+    "BatchAudio": BatchAudio,
+    "FlattenAudioBatch": FlattenAudioBatch,
     "SpectrogramImage": SpectrogramImage,
     "CombineImageWithAudio": CombineImageWithAudio,
     "ApplyVoiceFixer": ApplyVoiceFixer,
@@ -310,8 +424,13 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "LoadAudio": "Load Audio",
     "SaveAudio": "Save Audio",
     "ConvertAudio": "Convert Audio",
+    "ClipAudio": "Clip Audio",
+    "ConcatAudio": "Concatenate Audio",
+    "BatchAudio": "Batch Audio",
+    "FlattenAudioBatch": "Flatten Audio Batch",
     "SpectrogramImage": "Spectrogram Image",
     "CombineImageWithAudio": "Combine Image with Audio",
     "ApplyVoiceFixer": "Apply VoiceFixer",

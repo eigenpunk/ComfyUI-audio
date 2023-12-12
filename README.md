@@ -20,9 +20,9 @@ generative audio tools for ComfyUI. highly experimental&mdash;expect things to b
 cd ComfyUI/custom_nodes
 git clone https://github.com/eigenpunk/ComfyUI-audio
 cd ComfyUI-audio
+# pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cu118  # for cuda 11.8
 pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cu121  # for cuda 12.1
 pip install -U audiocraft --no-deps
-# pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cu118  # for cuda 11.8
 ```
 
 ## would be nice to have maybe
