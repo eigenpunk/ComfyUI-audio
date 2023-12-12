@@ -172,12 +172,11 @@ class SpectrogramImage:
         }
     
     RETURN_TYPES = ("IMAGE",)
-    FUNCTION = "save_spectrogram"
+    FUNCTION = "make_spectrogram"
     OUTPUT_NODE = True
     CATEGORY = "audio"
 
-    def save_spectrogram(self, audio, n_fft=400, hop_len=50, win_len=100, power=1.0, normalized=False, logy=True):
-    # def save_spectrogram(self, audio, sr):
+    def make_spectrogram(self, audio, n_fft=400, hop_len=50, win_len=100, power=1.0, normalized=False, logy=True):
         hop_len = n_fft // 4 if hop_len == 0 else hop_len
         win_len = n_fft if win_len == 0 else win_len
 
@@ -202,15 +201,6 @@ class SpectrogramImage:
                 spectro = clip.new_tensor(logyscale(spectro.numpy()))
                 
             results.append(spectro)
-            # img.save(full_name, pnginfo=meta, compress_level=self.compress_level)
-            # # path = audio_write(stem_name, clip, sr, format=file_format)
-            # result = {
-            #     "filename": full_name,
-            #     "subfolder": subdir,
-            #     "type": self.output_type,
-            # }
-            # results.append(result)
-            # count += 1
 
         return results,
 
@@ -228,6 +218,7 @@ class CombineImageWithAudio:
                 "image": ("IMAGE",),
                 "audio": ("AUDIO_TENSOR",),
                 "sr": ("INT", {"default": 32000}),
+                "file_format": (["webm", "mp4"],),
                 "filename_prefix": ("STRING", {"default": "ComfyUI"}),
             },
         }
@@ -237,7 +228,7 @@ class CombineImageWithAudio:
     OUTPUT_NODE = True
     CATEGORY = "audio"
 
-    def save_image_with_audio(self, image, audio, sr, filename_prefix):
+    def save_image_with_audio(self, image, audio, sr, file_format, filename_prefix):
         filename_prefix += self.prefix_append
         dur = audio[0].shape[-1] // sr
         channels = audio[0].shape[-2]
@@ -257,19 +248,22 @@ class CombineImageWithAudio:
             image_path = os.path.join(full_outdir, f"{name}.png")
             image.save(image_path, compress_level=4)
 
-            video_path = os.path.join(full_outdir, f"{name}.webm")
+            video_path = os.path.join(full_outdir, f"{name}.{file_format}")
 
             proc_args = [
                 shutil.which("ffmpeg"), "-y", "-i", image_path, "-i", str(audio_path),
-                "-c:v", "vp8", "-c:a", "opus", "-strict", "-2", "-b:a", "255k", video_path
             ]
-
+            if file_format == "webm":
+                proc_args += ["-c:v", "vp8", "-c:a", "opus", "-strict", "-2", video_path]
+            else:  # file_format == "mp4"
+                proc_args += ["-pix_fmt", "yuv420p", video_path]
+                
             subprocess.run(proc_args)
             results.append({
-                "filename": name + ".webm",
+                "filename": f"{name}.{file_format}",
                 "subfolder": subdir,
                 "type": self.output_type,
-                "format": "video/webm",
+                "format": "video/webm" if file_format == "webm" else "video/mpeg",
             })
             count += 1
 
