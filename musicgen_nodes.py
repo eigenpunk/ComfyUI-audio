@@ -25,6 +25,7 @@ MODEL_NAMES = [
 class MusicgenLoader:
     def __init__(self):
         self.model = None
+        self.name = None
 
     @classmethod
     def INPUT_TYPES(s):
@@ -36,21 +37,24 @@ class MusicgenLoader:
     CATEGORY = "audio"
 
     def load(self, model_name: str):
+        self.unload()
+
+        print(f"MusicgenLoader: loading {model_name}")
+
+        self.name = "facebook/" + model_name
+        model_class = AudioGen if "audiogen" in self.name else MusicGen
+
+        self.model = model_class.get_pretrained(self.name)
+        sr = self.model.sample_rate
+        return self.model, sr
+
+    def unload(self):
         if self.model is not None:
             # force move to cpu, delete/collect, clear cache
             self.model = object_to(self.model, empty_cuda_cache=False)
             del self.model
             do_cleanup()
             print("MusicgenLoader: unloaded model")
-
-        print(f"MusicgenLoader: loading {model_name}")
-
-        model_name = "facebook/" + model_name
-        model_class = AudioGen if "audiogen" in model_name else MusicGen
-
-        self.model = model_class.get_pretrained(model_name)
-        sr = self.model.sample_rate
-        return self.model, sr
 
 
 class MusicgenGenerate:
@@ -128,8 +132,9 @@ class MusicgenGenerate:
 
             audio_out = tensors_to_cpu(audio_out)
 
+        audio_out = torch.unbind(audio_out)
         do_cleanup()
-        return audio_out,
+        return list(audio_out),
 
 
 NODE_CLASS_MAPPINGS = {
