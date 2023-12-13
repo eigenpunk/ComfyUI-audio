@@ -347,22 +347,23 @@ class CombineImageWithAudio:
             filename_prefix, self.output_dir, dur, channels
         )
 
-        results = []
+        audio_results = []
+        video_results = []
         for image_tensor, clip in zip(image, audio):
             name = f"{base_fname}_{count:05}_"
             stem_name = os.path.join(full_outdir, name)
             audio_path = audio_write(stem_name, clip, sr, format="wav")
 
-            image = Image.fromarray(
-                image_tensor.mul(255.0).clip(0, 255).byte().numpy()
-            )
+            image = image_tensor.mul(255.0).clip(0, 255).byte().numpy()
+            image = Image.fromarray(image)
+
             image_path = os.path.join(full_outdir, f"{name}.png")
             image.save(image_path, compress_level=4)
 
             video_path = os.path.join(full_outdir, f"{name}.{file_format}")
 
             proc_args = [
-                shutil.which("ffmpeg"), "-y", "-i", image_path, "-i", str(audio_path),
+                shutil.which("ffmpeg"), "-y", "-i", image_path, "-i", str(audio_path)
             ]
             if file_format == "webm":
                 proc_args += ["-c:v", "vp8", "-c:a", "opus", "-strict", "-2", video_path]
@@ -370,15 +371,19 @@ class CombineImageWithAudio:
                 proc_args += ["-pix_fmt", "yuv420p", video_path]
                 
             subprocess.run(proc_args)
-            results.append({
+
+            d = {"subfolder": subdir, "type": self.output_type}
+            audio_results.append({
+                **d, "filename": f"{name}.wav", "format": "audio/wav",
+            })
+            video_results.append({
+                **d,
                 "filename": f"{name}.{file_format}",
-                "subfolder": subdir,
-                "type": self.output_type,
                 "format": "video/webm" if file_format == "webm" else "video/mpeg",
             })
             count += 1
 
-        return {"ui": {"clips": results}}
+        return {"ui": {"clips": audio_results, "videos": video_results}}
 
 
 class ApplyVoiceFixer:
