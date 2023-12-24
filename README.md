@@ -53,3 +53,4 @@ pip install -U audiocraft --no-deps
         - decoder -->
 - more audio generation models
     <!-- - [audiolm](https://github.com/lucidrains/audiolm-pytorch)/[musiclm](https://github.com/lucidrains/musiclm-pytorch) -->
+- demucs

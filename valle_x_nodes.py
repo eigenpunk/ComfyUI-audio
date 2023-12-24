@@ -55,7 +55,7 @@ class VALLEXModel:
     collater: TextTokenCollater
 
 
-# NOTE: the following two functions are adapted from Plachtaa's implementation of VALL-E X:
+# NOTE: the following function is adapted from Plachtaa's implementation of VALL-E X:
 # https://github.com/Plachtaa/VALL-E-X
 
 
@@ -195,7 +195,6 @@ class VALLEXGenerator:
                 "text_prompt": ("STRING", {"default": "", "multiline": True}),
                 "language": (["auto", *list(lang2token.keys())],),
                 "accent": (ACCENTS,),
-                # "mode": (["sliding-window", "fixed-prompt"]),
                 "temperature": ("FLOAT", {"default": 1.0, "min": 0.001, "step": 0.001}),
                 "topk": ("INT", {"default": 100, "step": 1}),
                 "best_of": ("INT", {"default": 8}),
