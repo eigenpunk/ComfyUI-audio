@@ -24,12 +24,16 @@ def do_cleanup(cuda_cache=True):
         torch.cuda.empty_cache()
 
 
+def get_device():
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
 def tensors_to(tensors, device):
     if isinstance(tensors, torch.Tensor):
         return tensors.to(device)
     if hasattr(tensors, "__dict__"):
         return object_to(tensors, device, empty_cuda_cache=False)
-    if isinstance(tensors, list):
+    if isinstance(tensors, (list, tuple)):
         return [tensors_to(x, device) for x in tensors]
     if isinstance(tensors, dict):
         return {k: tensors_to(v, device) for k, v in tensors.items()}
@@ -86,10 +90,10 @@ def object_to(obj, device=None, exclude=None, empty_cuda_cache=True, verbose=Fal
 
 
 @contextmanager
-def obj_on_device(model, src="cpu", dst="cuda", empty_cuda_cache=True, verbose_move=False):
-    model = object_to(model, dst, empty_cuda_cache=empty_cuda_cache, verbose=verbose_move)
+def obj_on_device(model, src="cpu", dst="cuda", exclude=None, empty_cuda_cache=True, verbose_move=False):
+    model = object_to(model, dst, exclude=exclude, empty_cuda_cache=empty_cuda_cache, verbose=verbose_move)
     yield model
-    model = object_to(model, src, empty_cuda_cache=empty_cuda_cache, verbose=verbose_move)
+    model = object_to(model, src, exclude=exclude, empty_cuda_cache=empty_cuda_cache, verbose=verbose_move)
 
 
 @contextmanager
