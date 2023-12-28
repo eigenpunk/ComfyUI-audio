@@ -12,14 +12,26 @@ from .musicgen_hf_nodes import (
     NODE_CLASS_MAPPINGS as MGHF_NODE_CLASS_MAPPINGS,
     NODE_DISPLAY_NAME_MAPPINGS as MGHF_NODE_DISPLAY_NAME_MAPPINGS,
 )
-from .tortoise_nodes import (
-    NODE_CLASS_MAPPINGS as TORTOISE_NODE_CLASS_MAPPINGS,
-    NODE_DISPLAY_NAME_MAPPINGS as TORTOISE_NODE_DISPLAY_NAME_MAPPINGS,
-)
-from .valle_x_nodes import (
-    NODE_CLASS_MAPPINGS as VEX_NODE_CLASS_MAPPINGS,
-    NODE_DISPLAY_NAME_MAPPINGS as VEX_NODE_DISPLAY_MAPPINGS,
-)
+
+try:
+    from .tortoise_nodes import (
+        NODE_CLASS_MAPPINGS as TORTOISE_NODE_CLASS_MAPPINGS,
+        NODE_DISPLAY_NAME_MAPPINGS as TORTOISE_NODE_DISPLAY_NAME_MAPPINGS,
+    )
+except Exception as e:
+    print(f"WARNING: ComfyUI-audio failed to import tortoise; reason: {e}")
+    TORTOISE_NODE_CLASS_MAPPINGS = {}
+    TORTOISE_NODE_DISPLAY_NAME_MAPPINGS = {}
+
+try:
+    from .valle_x_nodes import (
+        NODE_CLASS_MAPPINGS as VEX_NODE_CLASS_MAPPINGS,
+        NODE_DISPLAY_NAME_MAPPINGS as VEX_NODE_DISPLAY_MAPPINGS,
+    )
+except Exception as e:
+    print(f"WARNING: ComfyUI-audio failed to import vall_e_x; reason: {e}")
+    VEX_NODE_CLASS_MAPPINGS = {}
+    VEX_NODE_DISPLAY_MAPPINGS = {}
 
 
 NODE_CLASS_MAPPINGS = {
