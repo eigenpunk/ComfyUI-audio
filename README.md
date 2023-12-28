@@ -14,14 +14,14 @@ generative audio tools for ComfyUI. highly experimental&mdash;expect things to b
     - save audio, convert audio
 
 ## installation
-```bash
-# make sure you have activated the python environment used by ComfyUI
+```shell
+# TORCH_CUDA_INDEX_URL=https://download.pytorch.org/whl/cu118  # for cuda 11.8
+TORCH_CUDA_INDEX_URL=https://download.pytorch.org/whl/cu121  # for cuda 12.1
+
 cd ComfyUI/custom_nodes
 git clone https://github.com/eigenpunk/ComfyUI-audio
 cd ComfyUI-audio
-# pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu118  # for cuda 11.8
-pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121  # for cuda 12.1
-pip install -U audiocraft --no-deps
+pip install -r requirements.txt --extra-index-url $TORCH_CUDA_INDEX_URL
 ```
 
 ## would be nice to have maybe

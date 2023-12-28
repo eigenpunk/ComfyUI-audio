@@ -1,46 +1,5 @@
--e git+https://github.com/152334H/tortoise-tts-fast#egg=TorToiSe
-
-# vall-e x
-soundfile
-# torchvision
-tokenizers
-langid
-wget
-unidecode
-pyopenjtalk-prebuilt
-pypinyin
-inflect
-cn2an
-jieba
-eng_to_ipa
-openai-whisper
-matplotlib
-nltk
-lhotse
-sudachipy
-sudachidict_core
-vocos
-
-# audiocraft
-av
-einops
-flashy>=0.0.1
-hydra-core>=1.1
-hydra_colorlog
-julius
-num2words
-numpy
-sentencepiece
-spacy>=3.5.2
-huggingface_hub
-tqdm
-transformers>=4.31.0  # need Encodec there.
-demucs
-librosa
-torchmetrics
-encodec
-protobuf
-
+git+https://git@github.com/facebookresearch/audiocraft#egg=audiocraft
+git+https://github.com/korakoe/VALL-E-X#egg=vall_e_x
+git+https://github.com/neonbjb/tortoise-tts
 voicefixer2
-
-xformers
+deepspeed

@@ -3,6 +3,7 @@ import os
 import torch
 from tortoise.api import TextToSpeech, pick_best_batch_size_for_gpu
 from tortoise.api_fast import TextToSpeech as FastTextToSpeech
+from tortoise.models.cvvp import CVVP
 from tortoise.utils.audio import get_voices, load_voice
 
 from .util import do_cleanup, get_device, models_dir, object_to, obj_on_device
@@ -15,11 +16,39 @@ os.makedirs(VOICES_PATH, exist_ok=True)
 VOICES = get_voices(extra_voice_dirs=[VOICES_PATH])
 
 
+def _load_cvvp(self):
+    from urllib.request import urlretrieve
+    from tortoise.api import MODELS
+    self.cvvp = CVVP(
+        model_dim=512,
+        transformer_heads=8,
+        dropout=0,
+        mel_codes=8192,
+        conditioning_enc_depth=8,
+        cond_mask_percentage=0,
+        speech_enc_depth=8,
+        speech_mask_percentage=0,
+        latent_multiplier=1,
+    )
+    self.cvvp.eval()
+    ckpt_path = os.path.join(MODELS_PATH, "cvvp.pth")
+    if not os.path.exists(ckpt_path):
+        urlretrieve(MODELS["cvvp.pth"], ckpt_path)
+    cvvp_sd = torch.load(ckpt_path, map_location="cpu")
+    self.cvvp.load_state_dict(cvvp_sd)
+
+
+class TextToSpeech(TextToSpeech):
+    load_cvvp = _load_cvvp
+
+
+class FastTextToSpeech(FastTextToSpeech):
+    load_cvvp = _load_cvvp
+
+
 class TortoiseTTSLoader:
     """
     loads the Tortoise TTS "model", which is actually just the tortoise tts api
-
-    TODO: figure out why deepspeed no work
     """
     def __init__(self):
         self.model = None
