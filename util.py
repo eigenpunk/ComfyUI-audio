@@ -1,6 +1,5 @@
 import gc
 import os
-import sys
 from contextlib import contextmanager
 
 import torch
@@ -65,6 +64,7 @@ def object_to(obj, device=None, exclude=None, empty_cuda_cache=True, verbose=Fal
     device = device or "cpu"
 
     def _move_and_recurse(o, name=""):
+        child_moved = False
         for k, v in vars(o).items():
             moved = False
             cur_name = f"{name}.{k}" if name != "" else k
@@ -74,16 +74,17 @@ def object_to(obj, device=None, exclude=None, empty_cuda_cache=True, verbose=Fal
                 setattr(o, k, v.to(device))
                 moved = True
             elif hasattr(v, "__dict__"):
-                v = _move_and_recurse(v, name=cur_name)
-                setattr(o, k, v)
-                moved = True
-            if verbose and moved: print(f"moved {classname}.{cur_name} to {device}")
-        return o
+                v, moved = _move_and_recurse(v, name=cur_name)
+                if moved: setattr(o, k, v)
+            if verbose and moved:
+                print(f"moved {classname}.{cur_name} to {device}")
+            child_moved |= moved
+        return o, child_moved
     
     if isinstance(obj, torch.nn.Module):
         obj = obj.to(device)
 
-    obj = _move_and_recurse(obj)
+    obj, _ = _move_and_recurse(obj)
     if "cuda" in device and empty_cuda_cache:
         torch.cuda.empty_cache()
     return obj
