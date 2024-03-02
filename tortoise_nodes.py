@@ -1,6 +1,7 @@
 import os
 
 import torch
+import torch.nn.functional as F
 from tortoise.api import TextToSpeech, pick_best_batch_size_for_gpu
 from tortoise.api_fast import TextToSpeech as FastTextToSpeech
 from tortoise.models.cvvp import CVVP
@@ -44,6 +45,58 @@ class TextToSpeech(TextToSpeech):
 
 class FastTextToSpeech(FastTextToSpeech):
     load_cvvp = _load_cvvp
+    def tts(self, text, voice_samples=None, k=1, verbose=True, use_deterministic_seed=None,
+            # autoregressive generation parameters follow
+            num_autoregressive_samples=512, temperature=.8, length_penalty=1, repetition_penalty=2.0, 
+            top_p=.8, max_mel_tokens=500,
+            # CVVP parameters follow
+            cvvp_amount=.0,
+            **hf_generate_kwargs):
+        self.deterministic_state(seed=use_deterministic_seed)
+
+        text_tokens = torch.IntTensor(self.tokenizer.encode(text)).unsqueeze(0).to(self.device)
+        text_tokens = F.pad(text_tokens, (0, 1))  # This may not be necessary.
+        assert text_tokens.shape[-1] < 400, 'Too much text provided. Break the text up into separate segments and re-try inference.'
+        if voice_samples is not None:
+            auto_conditioning = self.get_conditioning_latents(voice_samples, return_mels=False)
+        else:
+            auto_conditioning  = self.get_random_conditioning_latents()
+        auto_conditioning = auto_conditioning.to(self.device)
+
+        with torch.no_grad():
+            if verbose:
+                print("Generating autoregressive samples..")
+            with torch.autocast(
+                    device_type="cuda" , dtype=torch.float16, enabled=self.half
+                ):
+                codes = self.autoregressive.inference_speech(
+                    auto_conditioning,
+                    text_tokens,
+                    top_k=num_autoregressive_samples,
+                    top_p=top_p,
+                    temperature=temperature,
+                    do_sample=True,
+                    num_beams=1,
+                    num_return_sequences=1,
+                    length_penalty=float(length_penalty),
+                    repetition_penalty=float(repetition_penalty),
+                    output_attentions=False,
+                    output_hidden_states=True,
+                    **hf_generate_kwargs,
+                )
+                gpt_latents = self.autoregressive(
+                    auto_conditioning.repeat(k, 1),
+                    text_tokens.repeat(k, 1),
+                    torch.tensor([text_tokens.shape[-1]], device=text_tokens.device),
+                    codes.repeat(k, 1),
+                    torch.tensor([codes.shape[-1]*self.autoregressive.mel_length_compression], device=text_tokens.device),
+                    return_latent=True,
+                    clip_inputs=False
+                )
+            if verbose:
+                print("generating audio..")
+            wav_gen = self.hifi_decoder.inference(gpt_latents.to(self.device), auto_conditioning)
+            return wav_gen.cpu()
 
 
 class TortoiseTTSLoader:
@@ -54,7 +107,7 @@ class TortoiseTTSLoader:
         self.model = None
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "kv_cache": ("BOOLEAN", {"default": True}),
@@ -99,7 +152,7 @@ class TortoiseTTSGenerate:
     subdirectory of "ComfyUI/models/tortoise/voices".
     """
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "model": ("TORTOISE_TTS",),
@@ -136,7 +189,7 @@ class TortoiseTTSGenerate:
         voice: str = "random",
         batch_size: int = 1,
         num_autoregressive_samples: int = 80,
-        autoregressive_batch_size: int = 0,
+        autoregressive_batch_size: int = 8,
         temperature: float = 1.0,
         length_penalty: float = 1.0,
         repetition_penalty: float = 2.0,
@@ -178,9 +231,9 @@ class TortoiseTTSGenerate:
                 k=batch_size,
                 verbose=True,
                 num_autoregressive_samples=num_autoregressive_samples,
-                temperature=temperature,
-                length_penalty=length_penalty,
-                repetition_penalty=repetition_penalty,
+                temperature=float(temperature),
+                length_penalty=float(length_penalty),
+                repetition_penalty=float(repetition_penalty),
                 top_p=top_p,
                 max_mel_tokens=max_mel_tokens,
                 cvvp_amount=cvvp_amount,
@@ -188,9 +241,9 @@ class TortoiseTTSGenerate:
                 **diffusion_kwargs,
             )
             if batch_size > 1:
-                audio_out = [x.squeeze(0).cpu() for x in audio_out]
+                audio_out = [x.view(*x.shape[-2:]).cpu() for x in audio_out]
             else:
-                audio_out = [audio_out.squeeze(0).cpu()]
+                audio_out = [audio_out.view(*audio_out.shape[-2:]).cpu()]
             m.device = prev_device
 
         do_cleanup()

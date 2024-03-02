@@ -1,6 +1,9 @@
 # ComfyUI-audio
 
-generative audio tools for ComfyUI. highly experimental&mdash;expect things to break and/or change frequently.
+generative audio tools for ComfyUI. highly experimental&mdash;expect things to break and/or change frequently or not at all.
+
+**NOTE**: for the foreseeable future, i will be unable to continue working on this extension. please consider forking this repository!
+
 
 ## features
 - [musicgen text-to-music + audiogen text-to-sound](https://facebookresearch.github.io/audiocraft/docs/MUSICGEN.html)
@@ -9,7 +12,8 @@ generative audio tools for ComfyUI. highly experimental&mdash;expect things to b
 - [tortoise text-to-speech](https://github.com/neonbjb/tortoise-tts)
 - [vall-e x text-to-speech](https://github.com/Plachtaa/VALL-E-X)
     - uses [korakoe's fork](https://github.com/korakoe/VALL-E-X)
-- [voicefixer2](https://github.com/voicefixer/voicefixer)
+- [voicefixer](https://github.com/voicefixer/voicefixer)
+    - uses [Render-AI's fork](https://github.com/Render-AI/voicefixer2)
 - audio utility nodes
     - save audio, convert audio
 
@@ -21,8 +25,16 @@ TORCH_CUDA_INDEX_URL=https://download.pytorch.org/whl/cu121  # for cuda 12.1
 cd ComfyUI/custom_nodes
 git clone https://github.com/eigenpunk/ComfyUI-audio
 cd ComfyUI-audio
+
+# for linux
 pip install -r requirements.txt --extra-index-url $TORCH_CUDA_INDEX_URL
+
+# for windows
+pip install -r requirements_windows.txt --extra-index-url $TORCH_CUDA_INDEX_URL
 ```
+
+this extension is developed and tested on a Linux-based OS. i've not yet been able to get the extension fully working on Windows, so
+expect some difficulty if that is your platform. i've not tested the extension on macOS at all.
 
 ## would be nice to have maybe
 - audio uploads
@@ -53,3 +65,6 @@ pip install -r requirements.txt --extra-index-url $TORCH_CUDA_INDEX_URL
 - more audio generation models
     <!-- - [audiolm](https://github.com/lucidrains/audiolm-pytorch)/[musiclm](https://github.com/lucidrains/musiclm-pytorch) -->
 - demucs
+
+
+*NOTE*: this work is solely a personal project; its development is not supported/sponsored by any past/present employer or any other external organization.

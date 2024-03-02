@@ -127,7 +127,7 @@ class VALLEXLoader:
         self.model = None
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {"required": {}}
 
     RETURN_NAMES = ("VALLEX_MODEL", "SR")
@@ -187,7 +187,7 @@ class VALLEXLoader:
 
 class VALLEXGenerator:
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "model": ("VALLEX_MODEL",),
@@ -246,7 +246,7 @@ class VALLEXGenerator:
 
 class VALLEXVoicePromptLoader:
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "voice": (VALLEX_VOICEPROMPTS,),
@@ -287,7 +287,7 @@ class VALLEXVoicePromptLoader:
 
 class VALLEXVoicePromptGenerator:
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "model": ("VALLEX_MODEL",),

@@ -17,7 +17,7 @@ class MusicgenHFLoader:
         self.processor = None
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {"required": {"model_name": (MODEL_NAMES,)}}
 
     RETURN_NAMES = ("MODEL", "PROCESSOR", "SR")
@@ -46,7 +46,7 @@ MILLISECONDS_PER_TOKEN = 20
 
 class MusicgenHFGenerate:
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "model": ("MUSICGEN_HF_MODEL",),

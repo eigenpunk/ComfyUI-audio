@@ -3,6 +3,7 @@ import os
 import random
 import shutil
 import subprocess
+import librosa
 import torch
 from torch import hann_window
 
@@ -26,7 +27,7 @@ from .util import (
 
 class LoadAudio:
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {"required": {"path": ("STRING", {"default": ""})}}
 
     RETURN_NAMES = ("AUDIO", "SR", "DURATION")
@@ -41,9 +42,31 @@ class LoadAudio:
         return [audio], sr, audio.shape[-1] / sr
 
 
+class NormalizeAudio:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "audio": ("AUDIO_TENSOR",),
+            }
+        }
+    
+    RETURN_NAMES = ("AUDIO",)
+    RETURN_TYPES = ("AUDIO_TENSOR",)
+    FUNCTION = "normalize_audio"
+    CATEGORY = "audio"
+
+    def normalize_audio(self, audio):
+        normed_audio = []
+        for clip in audio:
+            normed_clip = clip / clip.max()
+            normed_audio.append(normed_clip)
+        return normed_audio,
+
+
 class ClipAudio:
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "audio": ("AUDIO_TENSOR",),
@@ -69,8 +92,11 @@ class ClipAudio:
 
 
 class FlattenAudioBatch:
+    """
+    flatten a batch of audio into a single audio tensor
+    """
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {"required": {"audio_batch": ("AUDIO_TENSOR",)}}
     
     RETURN_NAMES = ("AUDIO",)
@@ -83,8 +109,14 @@ class FlattenAudioBatch:
 
 
 class ConcatAudio:
+    """
+    concatenate two batches of audio along their time dimensions
+
+    mismatched batch sizes are not supported unless one of the batches is size 1: if a batch has only
+    one item it will be repeated to match the size of the other batch if necessary.
+    """
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "batch1": ("AUDIO_TENSOR",),
@@ -115,8 +147,11 @@ class ConcatAudio:
 
 
 class BatchAudio:
+    """
+    combine two AUDIO_TENSOR batches together.
+    """
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "batch1": ("AUDIO_TENSOR",),
@@ -134,11 +169,14 @@ class BatchAudio:
 
 
 class ConvertAudio:
+    """
+    convert an AUDIO_TENSOR's sample rate and number of channels
+    """
     def __init__(self):
         pass
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "audio": ("AUDIO_TENSOR",),
@@ -162,13 +200,16 @@ class ConvertAudio:
 
 
 class SaveAudio:
+    """
+    save an AUDIO_TENSOR to disk. if the input is a batch, each item will be saved separately.
+    """
     def __init__(self):
         self.output_dir = get_output_directory()
         self.output_type = "output"
         self.prefix_append = ""
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "audio": ("AUDIO_TENSOR",),
@@ -239,7 +280,7 @@ class PreviewAudio(SaveAudio):
         )
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "audio": ("AUDIO_TENSOR",),
@@ -268,8 +309,11 @@ def logyscale(img_array):
 
 
 class SpectrogramImage:
+    """
+    create spectrogram images from audio.
+    """
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "audio": ("AUDIO_TENSOR",),
@@ -317,13 +361,16 @@ class SpectrogramImage:
 
 
 class CombineImageWithAudio:
+    """
+    combine an image and audio into a video clip.
+    """
     def __init__(self):
         self.output_dir = get_output_directory()
         self.output_type = "output"
         self.prefix_append = ""
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "image": ("IMAGE",),
@@ -391,7 +438,7 @@ class ApplyVoiceFixer:
         self.model = None
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {"required": {"audio": ("AUDIO_TENSOR",),}}
     
     FUNCTION = "apply"
@@ -414,6 +461,29 @@ class ApplyVoiceFixer:
         return results,
 
 
+class TrimSilence:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "audio": ("AUDIO_TENSOR",),
+                "top_db": ("FLOAT", {"default": 0.0}),
+            }
+        }
+    
+    FUNCTION = "trim"
+    RETURN_TYPES = ("AUDIO_TENSOR",)
+    CATEGORY = "audio"
+
+    def trim(self, audio, top_db=6.0):
+        trimmed_audio = []
+        for clip in audio:
+            print(clip)
+            trimmed_clip, _ = librosa.effects.trim(clip, top_db=top_db, frame_length=256, hop_length=128)
+            trimmed_audio.append(trimmed_clip)
+        return trimmed_audio,
+
+
 NODE_CLASS_MAPPINGS = {
     "LoadAudio": LoadAudio,
     "SaveAudio": SaveAudio,
@@ -425,6 +495,8 @@ NODE_CLASS_MAPPINGS = {
     "SpectrogramImage": SpectrogramImage,
     "CombineImageWithAudio": CombineImageWithAudio,
     "ApplyVoiceFixer": ApplyVoiceFixer,
+    "TrimSilence": TrimSilence,
+    "NormalizeAudio": NormalizeAudio,
     # "PreviewAudio": PreviewAudio,
 }
 
@@ -439,5 +511,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SpectrogramImage": "Spectrogram Image",
     "CombineImageWithAudio": "Combine Image with Audio",
     "ApplyVoiceFixer": "Apply VoiceFixer",
+    "TrimSilence": "Trim Silence",
+    "NormalizeAudio": "Normalize Audio",
     # "PreviewAudio": "Preview Audio",
 }
