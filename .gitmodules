@@ -1,0 +1,6 @@
+[submodule "include/hifi-gan"]
+	path = include/hifi-gan
+	url = https://github.com/justinjohn0306/hifi-gan.git
+[submodule "include/tacotron2"]
+	path = include/tacotron2
+	url = https://github.com/justinjohn0306/TTS-TT2.git
