@@ -490,22 +490,22 @@ class BlendAudio:
         blended_audio = []
 
         for a_to, a_from in zip(audio_to, audio_from):
+            a_to = a_to * MAX_WAV_VALUE
+            a_from = a_from * MAX_WAV_VALUE
             to_n = a_to.shape[-1]
             from_n = a_from.shape[-1]
 
             if to_n > from_n:
                 leftover = a_to[..., from_n:]
                 a_to = a_to[..., :from_n]
-
             elif from_n > to_n:
                 leftover = a_from[..., to_n:]
                 a_from = a_from[..., :to_n]
-
             else:
                 leftover = torch.empty(0, dtype=a_to.dtype)
 
             new_a = audio_to_strength * a_to + (1 - audio_to_strength) * a_from
-            blended_audio.append(torch.cat((new_a, leftover), dim=-1))
+            blended_audio.append(torch.cat((new_a, leftover), dim=-1) / MAX_WAV_VALUE)
 
         return blended_audio,
 
