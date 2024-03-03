@@ -45,13 +45,16 @@ class TextToSpeech(TextToSpeech):
 
 class FastTextToSpeech(FastTextToSpeech):
     load_cvvp = _load_cvvp
-    def tts(self, text, voice_samples=None, k=1, verbose=True, use_deterministic_seed=None,
-            # autoregressive generation parameters follow
-            num_autoregressive_samples=512, temperature=.8, length_penalty=1, repetition_penalty=2.0, 
-            top_p=.8, max_mel_tokens=500,
-            # CVVP parameters follow
-            cvvp_amount=.0,
-            **hf_generate_kwargs):
+    def tts(
+        self, text, voice_samples=None, k=1, verbose=True, use_deterministic_seed=None,
+        # autoregressive generation parameters follow
+        num_autoregressive_samples=512, temperature=.8, length_penalty=1, repetition_penalty=2.0, 
+        top_p=.8, max_mel_tokens=500,
+        # CVVP parameters follow
+        cvvp_amount=.0,
+        **hf_generate_kwargs,
+    ):
+        """function adapted from the original tortoise implementation by neonbjb."""
         self.deterministic_state(seed=use_deterministic_seed)
 
         text_tokens = torch.IntTensor(self.tokenizer.encode(text)).unsqueeze(0).to(self.device)

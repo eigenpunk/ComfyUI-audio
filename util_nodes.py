@@ -532,7 +532,6 @@ class InvertPhase:
         return normed_audio,
 
 
-
 class FilterAudio:
     @classmethod
     def INPUT_TYPES(cls):
