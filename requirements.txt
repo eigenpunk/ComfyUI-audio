@@ -1,5 +1,6 @@
 git+https://git@github.com/facebookresearch/audiocraft#egg=audiocraft
 git+https://github.com/korakoe/VALL-E-X#egg=vall_e_x
 git+https://github.com/neonbjb/tortoise-tts
-git+https://github.com/Render-AI/voicefixer2.git
+voicefixer
 deepspeed
+resampy
