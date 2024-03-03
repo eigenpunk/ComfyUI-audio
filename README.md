@@ -13,7 +13,6 @@ generative audio tools for ComfyUI. highly experimental&mdash;expect things to b
 - [vall-e x text-to-speech](https://github.com/Plachtaa/VALL-E-X)
     - uses [korakoe's fork](https://github.com/korakoe/VALL-E-X)
 - [voicefixer](https://github.com/voicefixer/voicefixer)
-    - uses [Render-AI's fork](https://github.com/Render-AI/voicefixer2)
 - audio utility nodes
     - save audio, convert audio
 
