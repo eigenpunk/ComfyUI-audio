@@ -9,7 +9,7 @@ import torch
 base_incl_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "include")
 
 sys.path = [
-    os.path.join(base_incl_path, "hifi_gan"),
+    os.path.join(base_incl_path, "hifi-gan"),
 ] + sys.path
 
 from denoiser import Denoiser as HifiGANDenoiser
