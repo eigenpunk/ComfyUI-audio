@@ -10,9 +10,8 @@ from torch import hann_window
 import numpy as np
 import scipy
 import resampy
+import torchaudio
 import torchaudio.functional as TAF
-from audiocraft.data.audio import audio_write, audio_read
-from audiocraft.data.audio_utils import convert_audio
 from PIL import Image
 
 from comfy.cli_args import args
@@ -52,44 +51,24 @@ FILTER_WINDOWS = {
 MAX_WAV_VALUE = 32768.0
 
 
-class LoadAudio:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {"required": {"path": ("STRING", {"default": ""})}}
-
-    RETURN_NAMES = ("AUDIO", "SR", "DURATION")
-    RETURN_TYPES = ("AUDIO_TENSOR", "INT", "FLOAT")
-    FUNCTION = "load"
-    CATEGORY = "audio"
-
-    def load(self, path):
-        if not os.path.isabs(path):
-            path = os.path.join(get_output_directory(), path)
-        audio, sr = audio_read(path)
-        return [audio], sr, audio.shape[-1] / sr
-
-
 class NormalizeAudio:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio": ("AUDIO_TENSOR",),
+                "audio": ("AUDIO",),
                 "power": ("FLOAT", {"default": 0.9, "min": 0.0, "max": 1.0, "step": 0.01})
             }
         }
-    
-    RETURN_NAMES = ("AUDIO",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "normalize_audio"
     CATEGORY = "audio"
 
     def normalize_audio(self, audio, power):
-        normed_audio = []
-        for clip in audio:
-            normed_clip = clip * (1.0 / clip.abs().max()) ** power
-            normed_audio.append(normed_clip)
-        return normed_audio,
+        clip = audio["waveform"]
+        normed_clip = clip * (1.0 / clip.abs().max(dim=-1, keepdim=True)[0]) ** power
+        return {"waveform": normed_clip, "sample_rate": audio["sample_rate"]},
 
 
 class ClipAudio:
@@ -97,26 +76,21 @@ class ClipAudio:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio": ("AUDIO_TENSOR",),
-                "sr": ("INT", {"default": 32000, "min": 0, "max": 2 ** 32}),
+                "audio": ("AUDIO",),
                 "from_s": ("FLOAT", {"default": 0.0, "step": 0.001}),
                 "to_s": ("FLOAT", {"default": 0.0, "step": 0.001}),
             }
         }
-    
-    RETURN_NAMES = ("AUDIO",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "clip_audio"
     CATEGORY = "audio"
 
-    def clip_audio(self, audio, sr, from_s, to_s):
+    def clip_audio(self, audio, from_s, to_s):
+        sr = audio["sample_rate"]
         from_sample = int(from_s * sr)
         to_sample = int(to_s * sr)
-        clipped_audio = []
-        for a in audio:
-            a_clipped = a[..., from_sample:to_sample]
-            clipped_audio.append(a_clipped)
-        return clipped_audio,
+        return {"waveform": audio["waveform"][..., from_sample:to_sample], "sample_rate": sr},
 
 
 class TrimAudio:
@@ -124,26 +98,21 @@ class TrimAudio:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio": ("AUDIO_TENSOR",),
-                "sr": ("INT", {"default": 32000, "min": 0, "max": 2 ** 32}),
+                "audio": ("AUDIO",),
                 "s_from_start": ("FLOAT", {"default": 0.0, "step": 0.001}),
                 "s_from_end": ("FLOAT", {"default": 0.0, "step": 0.001}),
             }
         }
-    
-    RETURN_NAMES = ("AUDIO",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "clip_audio"
     CATEGORY = "audio"
 
-    def clip_audio(self, audio, sr, s_from_start, s_from_end):
+    def clip_audio(self, audio, s_from_start, s_from_end):
+        sr = audio["sample_rate"]
         from_sample = int(s_from_start * sr)
         to_sample = (int(s_from_end * sr) + 1)
-        clipped_audio = []
-        for a in audio:
-            a_clipped = a[..., from_sample:-to_sample]
-            clipped_audio.append(a_clipped)
-        return clipped_audio,
+        return {"waveform": audio["waveform"][..., from_sample:-to_sample], "sample_rate": sr},
 
 
 class TrimAudioSamples:
@@ -151,25 +120,20 @@ class TrimAudioSamples:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio": ("AUDIO_TENSOR",),
+                "audio": ("AUDIO",),
                 "from_start": ("INT", {"default": 0, "min": 0, "max": 2 ** 32, "step": 1}),
                 "from_end": ("INT", {"default": 0, "min": 0, "max": 2 ** 32, "step": 1}),
             }
         }
-    
-    RETURN_NAMES = ("AUDIO",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "clip_audio"
     CATEGORY = "audio"
 
     def clip_audio(self, audio, from_start, from_end):
         from_sample = from_start
         to_sample = from_end + 1
-        clipped_audio = []
-        for a in audio:
-            a_clipped = a[..., from_sample:-to_sample]
-            clipped_audio.append(a_clipped)
-        return clipped_audio,
+        return {"audio": audio["waveform"][..., from_sample:-to_sample], "sample_rate": audio["sample_rate"]},
 
 
 class FlattenAudioBatch:
@@ -178,15 +142,17 @@ class FlattenAudioBatch:
     """
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"audio_batch": ("AUDIO_TENSOR",)}}
-    
-    RETURN_NAMES = ("AUDIO",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+        return {"required": {"audio_batch": ("AUDIO",)}}
+
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "concat_audio"
     CATEGORY = "audio"
 
     def concat_audio(self, audio_batch):
-        return [torch.concat(audio_batch, dim=-1)],
+        audio = audio_batch["waveform"]
+        n, c, t = audio.shape
+        audio = audio.permute(0, 2, 1)
+        return {"waveform": audio.reshape(1, -1, c).permute(0, 2, 1), "sample_rate": audio["sample_rate"]},
 
 
 class ConcatAudio:
@@ -200,58 +166,53 @@ class ConcatAudio:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "batch1": ("AUDIO_TENSOR",),
-                "batch2": ("AUDIO_TENSOR",),
+                "batch1": ("AUDIO",),
+                "batch2": ("AUDIO",),
             }
         }
-    
-    RETURN_NAMES = ("AUDIO",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "concat_audio"
     CATEGORY = "audio"
 
     def concat_audio(self, batch1, batch2):
-        if len(batch1) == len(batch2) and len(batch2) == 1:
-            return torch.concat([batch1[0], batch2[0]], dim=-1)
+        # TODO: validate that the sample rates are the same
+        b1 = batch1["waveform"]
+        b2 = batch2["waveform"]
 
-        b1 = batch1.copy()
-        b2 = batch2.copy()
+        if len(b1) == 1 and len(b2) != 1:
+            b1 = b1.expand(len(b2), -1, -1)
+        elif len(b2) == 1 and len(b1) != 1:
+            b2 = b2.expand(len(b1), -1, -1)
 
-        if len(b1) == 1:
-            b1 = b1 * len(b2)
-        elif len(b2) == 1:
-            b2 = b2 * len(b1)
-
-        batch = [torch.concat([x1, x2], dim=-1) for x1, x2 in zip(b1, b2)]
-
-        return batch,
+        return {"waveform": torch.concat([b1, b2], dim=-1), "sample_rate": batch1["sample_rate"]},
 
 
 class BatchAudio:
     """
-    combine two AUDIO_TENSOR batches together.
+    combine two AUDIO batches together.
     """
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "batch1": ("AUDIO_TENSOR",),
-                "batch2": ("AUDIO_TENSOR",),
+                "batch1": ("AUDIO",),
+                "batch2": ("AUDIO",),
             }
         }
-    
-    RETURN_NAMES = ("AUDIO_BATCH",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "batch_audio"
     CATEGORY = "audio"
 
     def batch_audio(self, batch1, batch2):
-        return batch1 + batch2,
+        batch = torch.cat([batch1["waveform"], batch2["waveform"]], dim=0)
+        return {"waveform": batch, "sample_rate": batch1["sample_rate"]},
 
 
 class ConvertAudio:
     """
-    convert an AUDIO_TENSOR's sample rate and number of channels
+    convert audio sample rate and/or number of channels
     """
     def __init__(self):
         pass
@@ -260,27 +221,26 @@ class ConvertAudio:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio": ("AUDIO_TENSOR",),
-                "from_rate": ("INT", {"default": 44100, "min": 1, "max": 2 ** 32}),
+                "audio": ("AUDIO",),
                 "to_rate": ("INT", {"default": 32000, "min": 1, "max": 2 ** 32}),
                 "to_channels": ("INT", {"default": 1, "min": 1, "max": 2, "step": 1}),
             }
         }
 
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "convert"
     CATEGORY = "audio"
 
-    def convert(self, audio, from_rate, to_rate, to_channels):
-        converted = []
-        for clip in audio:
-            expand_dim = len(clip.shape) == 2
-            if expand_dim:
-                clip = clip.unsqueeze(0)
-            conv_clip = convert_audio(clip, from_rate, to_rate, to_channels)
-            conv_clip = conv_clip.squeeze(0) if expand_dim else conv_clip
-            converted.append(conv_clip)
-        return converted,
+    def convert(self, audio, to_rate, to_channels):
+        from_rate = audio["sample_rate"]
+        waveform = audio["waveform"]
+        waveform = TAF.resample(waveform, from_rate, to_rate)
+        if to_channels == 1:
+            waveform = waveform.mean(dim=1, keepdim=True)
+        elif to_channels == 2 and waveform.shape[1] == 1:
+            waveform = waveform.expand(-1, to_channels, -1)
+
+        return {"waveform": waveform, "sample_rate": to_rate},
 
 
 class ResampleAudio:
@@ -288,7 +248,7 @@ class ResampleAudio:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio": ("AUDIO_TENSOR",),
+                "audio": ("AUDIO",),
                 "from_rate": ("INT", {"default": 44100, "min": 1, "max": 2 ** 32}),
                 "to_rate": ("INT", {"default": 32000, "min": 1, "max": 2 ** 32}),
                 "filter": (["sinc_window", "kaiser_best", "kaiser_fast"], ),
@@ -297,123 +257,28 @@ class ResampleAudio:
             }
         }
 
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "convert"
     CATEGORY = "audio"
 
     def convert(self, audio, from_rate, to_rate, filter, window, num_zeros):
         converted = []
         w = FILTER_WINDOWS[window]
-        for clip in audio:
+        for clip in audio["waveform"]:
             new_clip = resampy.resample(clip.numpy(), from_rate, to_rate, filter=filter, window=w, num_zeros=num_zeros, parallel=False)
             converted.append(torch.from_numpy(new_clip))
-        return converted,
-
-
-class SaveAudio:
-    """
-    save an AUDIO_TENSOR to disk. if the input is a batch, each item will be saved separately.
-    """
-    def __init__(self):
-        self.output_dir = get_output_directory()
-        self.output_type = "output"
-        self.prefix_append = ""
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "audio": ("AUDIO_TENSOR",),
-                "sr": ("INT", {"default": 32000}),
-                "file_format": (["wav", "mp3", "ogg", "flac"],),
-                "filename_prefix": ("STRING", {"default": "ComfyUI"}),
-            },
-            "hidden": {
-                "prompt": "PROMPT",
-                "extra_pnginfo": "EXTRA_PNGINFO",
-            },
-        }
-
-    RETURN_TYPES = ()
-    FUNCTION = "save_audio"
-    OUTPUT_NODE = True
-    CATEGORY = "audio"
-
-    def save_audio(
-        self,
-        audio,
-        sr,
-        file_format,
-        filename_prefix="ComfyUI",
-        prompt=None,
-        extra_pnginfo=None,
-    ):
-        filename_prefix += self.prefix_append
-        dur = audio[0].shape[-1] // sr
-        channels = audio[0].shape[-2]
-        full_outdir, base_fname, count, subdir, filename_prefix = get_save_image_path(
-            filename_prefix, self.output_dir, dur, channels
-        )
-
-        mimetype = {
-            "wav": "audio/wav",
-            "mp3": "audio/mpeg",
-            "ogg": "audio/ogg",
-            "flac": "audio/flac",
-        }[file_format]
-
-        results = []
-        for clip in audio:
-            name = f"{base_fname}_{count:05}_"
-            stem_name = os.path.join(full_outdir, name)
-            path = audio_write(stem_name, clip, sr, format=file_format)
-            result = {
-                "filename": path.name,
-                "subfolder": subdir,
-                "type": self.output_type,
-                "format": mimetype,
-            }
-            results.append(result)
-            count += 1
-
-        return {"ui": {"clips": results}}
-
-
-class PreviewAudio(SaveAudio):
-    r"""
-    NOTE: this doesn't actually do anything yet, need to write js extension code
-    """
-    def __init__(self):
-        self.output_dir = get_temp_directory()
-        self.output_type = "temp"
-        self.prefix_append = "_temp_" + "".join(
-            random.choice("abcdefghijklmnopqrstupvxyz") for _ in range(5)
-        )
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "audio": ("AUDIO_TENSOR",),
-                "sr": ("INT", {"default": 32000}),
-                "file_format": (["wav", "mp3", "ogg", "flac"],),
-            },
-            "hidden": {
-                "prompt": "PROMPT",
-                "extra_pnginfo": "EXTRA_PNGINFO",
-            },
-        }
+        return {"waveform": torch.stack(converted, dim=0), "sample_rate": to_rate},
 
 
 def logyscale(img_array):
-    height, width = img_array.shape[:2]
+    height, width = img_array.shape
 
-    def _remap(x, y):
-        return min(int(math.log(x + 1) * height / math.log(height)), height - 1), min(y, width - 1)
+    def _remap(y, x):
+        return min(int(math.log(y + 1) * height / math.log(height)), height - 1), min(x, width - 1)
     v_remap = np.vectorize(_remap)
 
-    indices = np.meshgrid(np.arange(height), np.arange(width), indexing="ij")
-    indices = v_remap(*indices)
+    y, x = np.meshgrid(np.arange(height), np.arange(width), indexing="ij")
+    indices = v_remap(y, x)
     img_array = img_array[indices]
 
     return img_array
@@ -427,7 +292,7 @@ class SpectrogramImage:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio": ("AUDIO_TENSOR",),
+                "audio": ("AUDIO",),
                 "n_fft": ("INT", {"default": 200}),
                 "hop_len": ("INT", {"default": 50}),
                 "win_len": ("INT", {"default": 100}),
@@ -436,7 +301,7 @@ class SpectrogramImage:
                 "logy": ("BOOLEAN", {"default": True}),
             },
         }
-    
+
     RETURN_TYPES = ("IMAGE",)
     FUNCTION = "make_spectrogram"
     OUTPUT_NODE = True
@@ -446,28 +311,32 @@ class SpectrogramImage:
         hop_len = n_fft // 4 if hop_len == 0 else hop_len
         win_len = n_fft if win_len == 0 else win_len
 
-        results = []
-        for clip in audio:
-            spectro = TAF.spectrogram(
-                clip,
-                0,
-                window=hann_window(win_len),
-                n_fft=n_fft,
-                hop_length=hop_len,
-                win_length=win_len,
-                power=power,
-                normalized=normalized,
-                center=True,
-                pad_mode="reflect",
-                onesided=True,
-            )
-            spectro = spectro[0].flip(0)
+        clip = audio["waveform"]
 
-            if logy:
-                spectro = clip.new_tensor(logyscale(spectro.numpy()))
-                
-            results.append(spectro)
+        print("clip", clip.shape)
 
+        spectro = TAF.spectrogram(
+            clip,
+            0,
+            window=hann_window(win_len),
+            n_fft=n_fft,
+            hop_length=hop_len,
+            win_length=win_len,
+            power=power,
+            normalized=normalized,
+            center=True,
+            pad_mode="reflect",
+            onesided=True,
+        )  # yields an Nx1xCxT tensor
+        spectro = spectro[:, 0, ...].flip(1)  # NxCxT
+        print("spectro", spectro.shape)
+        if logy:
+            n, c, t = spectro.shape
+            spectro = spectro.permute(0, 2, 1).flatten(0, 1).T.numpy()
+            spectro = clip.new_tensor(logyscale(spectro))
+            spectro = spectro.T.reshape(n, t, c).permute(0, 2, 1)
+
+        results = spectro[..., None].expand(-1, -1, -1, 3)
         return results,
 
 
@@ -476,38 +345,37 @@ class BlendAudio:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio_to": ("AUDIO_TENSOR",),
-                "audio_from": ("AUDIO_TENSOR",),
+                "audio_to": ("AUDIO",),
+                "audio_from": ("AUDIO",),
                 "audio_to_strength": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
             }
         }
-    
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "blend"
     CATEGORY = "audio"
 
     def blend(self, audio_to, audio_from, audio_to_strength):
-        blended_audio = []
+        a_to = audio_to["waveform"]
+        a_from = audio_from["waveform"]
+        a_to = a_to.float() * MAX_WAV_VALUE
+        a_from = a_from.float() * MAX_WAV_VALUE
+        to_n = a_to.shape[-1]
+        from_n = a_from.shape[-1]
 
-        for a_to, a_from in zip(audio_to, audio_from):
-            a_to = a_to * MAX_WAV_VALUE
-            a_from = a_from * MAX_WAV_VALUE
-            to_n = a_to.shape[-1]
-            from_n = a_from.shape[-1]
+        if to_n > from_n:
+            leftover = a_to[..., from_n:]
+            a_to = a_to[..., :from_n]
+        elif from_n > to_n:
+            leftover = a_from[..., to_n:]
+            a_from = a_from[..., :to_n]
+        else:
+            leftover = torch.empty(0, dtype=torch.float)
 
-            if to_n > from_n:
-                leftover = a_to[..., from_n:]
-                a_to = a_to[..., :from_n]
-            elif from_n > to_n:
-                leftover = a_from[..., to_n:]
-                a_from = a_from[..., :to_n]
-            else:
-                leftover = torch.empty(0, dtype=a_to.dtype)
+        new_a = audio_to_strength * a_to + (1 - audio_to_strength) * a_from
+        blended_audio = torch.cat((new_a, leftover), dim=-1) / MAX_WAV_VALUE
 
-            new_a = audio_to_strength * a_to + (1 - audio_to_strength) * a_from
-            blended_audio.append(torch.cat((new_a, leftover), dim=-1) / MAX_WAV_VALUE)
-
-        return blended_audio,
+        return {"waveform": blended_audio, "sample_rate": audio_to["sample_rate"]},
 
 
 class InvertPhase:
@@ -515,21 +383,16 @@ class InvertPhase:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio": ("AUDIO_TENSOR",),
+                "audio": ("AUDIO",),
             }
         }
-    
-    RETURN_NAMES = ("AUDIO",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "invert"
     CATEGORY = "audio"
 
     def invert(self, audio):
-        normed_audio = []
-        for clip in audio:
-            normed_clip = -clip
-            normed_audio.append(normed_clip)
-        return normed_audio,
+        return {"waveform": -audio["waveform"], "sample_rate": audio["sample_rate"]},
 
 
 class FilterAudio:
@@ -537,7 +400,7 @@ class FilterAudio:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio": ("AUDIO_TENSOR",),
+                "audio": ("AUDIO",),
                 "numtaps": ("INT", {"default": 101, "min": 1, "max": 2 ** 32}),
                 "cutoff": ("INT", {"default": 10500, "min": 1, "max": 2 ** 32}),
                 "width": ("INT", {"default": 0, "min": 0, "max": 2 ** 32}),
@@ -547,8 +410,8 @@ class FilterAudio:
                 "fs": ("INT", {"default": 32000, "min": 1, "max": 2 ** 32}),
             }
         }
-    
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "filter_audio"
     CATEGORY = "audio"
 
@@ -558,12 +421,11 @@ class FilterAudio:
 
         filtered = []
         f = scipy.signal.firwin(numtaps, cutoff, width=width, window=window, pass_zero=pass_zero, scale=scale, fs=fs)
-        for clip in audio:
-            dtype = clip.dtype
+        for clip in audio["waveform"]:
             filtered_clip = scipy.signal.lfilter(f, [1.0], clip.numpy() * MAX_WAV_VALUE)
-            filtered.append(torch.from_numpy(filtered_clip / MAX_WAV_VALUE).to(dtype=dtype))
+            filtered.append(torch.from_numpy(filtered_clip / MAX_WAV_VALUE).float())
 
-        return filtered,
+        return {"waveform": torch.stack(filtered, dim=0), "sample_rate": audio["sample_rate"]},
 
 
 class CombineImageWithAudio:
@@ -580,8 +442,7 @@ class CombineImageWithAudio:
         return {
             "required": {
                 "image": ("IMAGE",),
-                "audio": ("AUDIO_TENSOR",),
-                "sr": ("INT", {"default": 32000}),
+                "audio": ("AUDIO",),
                 "file_format": (["webm", "mp4"],),
                 "filename_prefix": ("STRING", {"default": "ComfyUI"}),
             },
@@ -592,25 +453,29 @@ class CombineImageWithAudio:
     OUTPUT_NODE = True
     CATEGORY = "audio"
 
-    def save_image_with_audio(self, image, audio, sr, file_format, filename_prefix):
+    def save_image_with_audio(self, image, audio, file_format, filename_prefix):
         filename_prefix += self.prefix_append
-        dur = audio[0].shape[-1] // sr
-        channels = audio[0].shape[-2]
+        sr = audio["sample_rate"]
+        dur = audio["waveform"][0].shape[-1] // sr
+        channels = audio["waveform"][0].shape[-2]
         full_outdir, base_fname, count, subdir, filename_prefix = get_save_image_path(
             filename_prefix, self.output_dir, dur, channels
         )
 
         audio_results = []
         video_results = []
-        for image_tensor, clip in zip(image, audio):
-            name = f"{base_fname}_{count:05}_"
-            stem_name = os.path.join(full_outdir, name)
-            audio_path = audio_write(stem_name, clip, sr, format="wav")
+
+        for image_tensor, clip in zip(image, audio["waveform"]):
+            name = f"{base_fname}_{count:05}.wav"
+            tmp_dir = get_temp_directory()
+            stem_name = os.path.join(tmp_dir, name)
+            torchaudio.save(stem_name, clip, sr, format="wav")
+            audio_path = stem_name
 
             image = image_tensor.mul(255.0).clip(0, 255).byte().numpy()
             image = Image.fromarray(image)
 
-            image_path = os.path.join(full_outdir, f"{name}.png")
+            image_path = os.path.join(tmp_dir, f"{name}.png")
             image.save(image_path, compress_level=4)
 
             video_path = os.path.join(full_outdir, f"{name}.{file_format}")
@@ -622,7 +487,7 @@ class CombineImageWithAudio:
                 proc_args += ["-c:v", "vp8", "-c:a", "opus", "-strict", "-2", video_path]
             else:  # file_format == "mp4"
                 proc_args += ["-pix_fmt", "yuv420p", video_path]
-                
+
             subprocess.run(proc_args)
 
             d = {"subfolder": subdir, "type": self.output_type}
@@ -636,7 +501,7 @@ class CombineImageWithAudio:
             })
             count += 1
 
-        return {"ui": {"clips": audio_results, "videos": video_results}}
+        return {"ui": {"audio": audio_results, "video": video_results}}
 
 
 class ApplyVoiceFixer:
@@ -646,15 +511,15 @@ class ApplyVoiceFixer:
     @classmethod
     def INPUT_TYPES(cls):
         return {
-            "required": 
+            "required":
                 {
-                    "audio": ("AUDIO_TENSOR",),
+                    "audio": ("AUDIO",),
                     "mode": ("INT", {"default": 0, "min": 0, "max": 2}),
                 },
             }
-    
+
     FUNCTION = "apply"
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+    RETURN_TYPES = ("AUDIO",)
     CATEGORY = "audio"
 
     def apply(self, audio, mode):
@@ -665,12 +530,12 @@ class ApplyVoiceFixer:
 
         results = []
         with on_device(self.model, dst=device) as model:
-            for clip in audio:
+            for clip in audio["waveform"]:
                 output = model.restore_inmem(clip.squeeze(0).numpy(), cuda=device == "cuda", mode=mode)
                 results.append(clip.new_tensor(output))
 
         do_cleanup()
-        return results,
+        return {"waveform": torch.stack(results), "sample_rate": audio["sample_rate"]},
 
 
 class TrimSilence:
@@ -678,26 +543,23 @@ class TrimSilence:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio": ("AUDIO_TENSOR",),
+                "audio": ("AUDIO",),
                 "top_db": ("FLOAT", {"default": 0.0}),
             }
         }
-    
+
     FUNCTION = "trim"
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+    RETURN_TYPES = ("AUDIO",)
     CATEGORY = "audio"
 
     def trim(self, audio, top_db=6.0):
-        trimmed_audio = []
-        for clip in audio:
-            trimmed_clip, _ = librosa.effects.trim(clip, top_db=top_db, frame_length=256, hop_length=128)
-            trimmed_audio.append(trimmed_clip)
-        return trimmed_audio,
+        if audio["waveform"].shape[0] != 1:
+            raise ValueError("Can only trim one audio clip at a time")
+        trimmed_clip, _ = librosa.effects.trim(audio["waveform"], top_db=top_db, frame_length=256, hop_length=128)
+        return {"waveform": trimmed_clip, "sample_rate": audio["sample_rate"]},
 
 
 NODE_CLASS_MAPPINGS = {
-    "LoadAudio": LoadAudio,
-    "SaveAudio": SaveAudio,
     "ConvertAudio": ConvertAudio,
     "FilterAudio": FilterAudio,
     "ResampleAudio": ResampleAudio,
@@ -714,12 +576,9 @@ NODE_CLASS_MAPPINGS = {
     "ApplyVoiceFixer": ApplyVoiceFixer,
     "TrimSilence": TrimSilence,
     "NormalizeAudio": NormalizeAudio,
-    # "PreviewAudio": PreviewAudio,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "LoadAudio": "Load Audio",
-    "SaveAudio": "Save Audio",
     "ConvertAudio": "Convert Audio",
     "FilterAudio": "Filter Audio",
     "ResampleAudio": "Resample Audio",
@@ -736,5 +595,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ApplyVoiceFixer": "Apply VoiceFixer",
     "TrimSilence": "Trim Silence",
     "NormalizeAudio": "Normalize Audio",
-    # "PreviewAudio": "Preview Audio",
 }

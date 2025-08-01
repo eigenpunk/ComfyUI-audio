@@ -120,7 +120,7 @@ class TortoiseTTSLoader:
             }
         }
 
-    RETURN_NAMES = ("MODEL", "SR")
+    RETURN_NAMES = ("model", "sr")
     RETURN_TYPES = ("TORTOISE_TTS", "INT")
     FUNCTION = "load"
     CATEGORY = "audio"
@@ -178,11 +178,8 @@ class TortoiseTTSGenerate:
             },
         }
 
-    RETURN_NAMES = ("RAW_AUDIO",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
-
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "generate"
-
     CATEGORY = "audio"
 
     def generate(
@@ -243,14 +240,10 @@ class TortoiseTTSGenerate:
                 use_deterministic_seed=seed,
                 **diffusion_kwargs,
             )
-            if batch_size > 1:
-                audio_out = [x.view(*x.shape[-2:]).cpu() for x in audio_out]
-            else:
-                audio_out = [audio_out.view(*audio_out.shape[-2:]).cpu()]
             m.device = prev_device
 
         do_cleanup()
-        return audio_out,
+        return {"waveform": audio_out, "sample_rate": 24000},
 
 
 NODE_CLASS_MAPPINGS = {

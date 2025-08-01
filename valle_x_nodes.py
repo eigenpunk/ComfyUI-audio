@@ -130,7 +130,7 @@ class VALLEXLoader:
     def INPUT_TYPES(cls):
         return {"required": {}}
 
-    RETURN_NAMES = ("VALLEX_MODEL", "SR")
+    RETURN_NAMES = ("model", "sr")
     RETURN_TYPES = ("VALLEX_MODEL", "INT")
     FUNCTION = "load"
     CATEGORY = "audio"
@@ -203,8 +203,8 @@ class VALLEXGenerator:
             }
         }
 
-    RETURN_NAMES = ("RAW_AUDIO",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+    RETURN_NAMES = ("audio",)
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "generate"
     CATEGORY = "audio"
 
@@ -241,7 +241,7 @@ class VALLEXGenerator:
             )
 
         do_cleanup()
-        return [normalize_loudness(torch.from_numpy(audio).unsqueeze(0), 24000, loudness_compressor=True)],
+        return normalize_loudness(torch.from_numpy(audio).unsqueeze(0), 24000, loudness_compressor=True),
 
 
 class VALLEXVoicePromptLoader:
@@ -252,8 +252,7 @@ class VALLEXVoicePromptLoader:
                 "voice": (VALLEX_VOICEPROMPTS,),
             }
         }
-    
-    RETURN_NAMES = ("VOICE_PROMPT",)
+
     RETURN_TYPES = ("VALLEX_VPROMPT",)
     FUNCTION = "load_prompt"
     CATEGORY = "audio"
@@ -292,11 +291,10 @@ class VALLEXVoicePromptGenerator:
             "required": {
                 "model": ("VALLEX_MODEL",),
                 "transcript": ("STRING", {"default": "", "multiline": True}),
-                "audio": ("AUDIO_TENSOR",),
+                "audio": ("AUDIO",),
             }
         }
 
-    RETURN_NAMES = ("VOICE_PROMPT",)
     RETURN_TYPES = ("VALLEX_VPROMPT",)
     FUNCTION = "make_prompt"
     CATEGORY = "audio"
@@ -307,12 +305,10 @@ class VALLEXVoicePromptGenerator:
         text_collater: TextTokenCollater = model.collater
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(audio)
-        if isinstance(audio, list):
-            audio = audio[0]
-        wav_pr = audio
-        print(audio)
-        print(audio.shape)
+        wav_pr = audio["waveform"]
+
+        print(wav_pr)
+        print(wav_pr.shape)
 
         if wav_pr.size(0) == 2:
             wav_pr = wav_pr.mean(0, keepdim=True)

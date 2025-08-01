@@ -71,8 +71,7 @@ class Tacotron2Loader:
             "required": {"model_name": (list(MODELS.keys()),),}
         }
 
-    RETURN_NAMES = ("TT2_MODEL", "SR")
-    RETURN_TYPES = ("TT2_MODEL", "INT")
+    RETURN_TYPES = ("TT2_MODEL",)
     FUNCTION = "load"
     CATEGORY = "audio"
 
@@ -94,7 +93,7 @@ class Tacotron2Loader:
         self.model.device = "cpu"
         self.model.eval().half()
 
-        return self.model, 22050
+        return self.model,
 
 
 class WaveGlowLoader:
@@ -109,7 +108,7 @@ class WaveGlowLoader:
     def INPUT_TYPES(cls):
         return {"required": {"model_name": (list(WAVEGLOW_MODELS.keys()),),}}
 
-    RETURN_TYPES = ("WG_MODEL",)
+    RETURN_TYPES = ("WAVEGLOW_MODEL",)
     FUNCTION = "load"
     CATEGORY = "audio"
 
@@ -150,7 +149,7 @@ class HifiGANLoader:
             }
         }
 
-    RETURN_TYPES = ("HG_MODEL",)
+    RETURN_TYPES = ("HIFIGAN_MODEL",)
     FUNCTION = "load"
     CATEGORY = "audio"
 
@@ -203,10 +202,8 @@ class Tacotron2Generate:
         }
 
     RETURN_NAMES = ("mel_outputs", "postnet_outputs")
-    RETURN_TYPES = ("MEL_TENSOR", "MEL_TENSOR")
-
+    RETURN_TYPES = ("MELS", "MELS")
     FUNCTION = "generate"
-
     CATEGORY = "audio"
 
     def generate(
@@ -240,18 +237,15 @@ class WaveGlowApply:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "mels": ("MEL_TENSOR",),
-                "model": ("WG_MODEL",),
+                "mels": ("MELS",),
+                "model": ("WAVEGLOW_MODEL",),
                 "sigma": ("FLOAT", {"default": 1.0, "min": 0.0}),
                 "denoiser_strength": ("FLOAT", {"default": 0.06, "min": 0}),
             },
         }
 
-    RETURN_NAMES = ("raw_audio",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
-
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "apply"
-
     CATEGORY = "audio"
 
     def apply(
@@ -283,7 +277,7 @@ class WaveGlowApply:
             wg.device = dn.device = prev_device
 
         do_cleanup()
-        return audio,
+        return {"waveform": audio, "sample_rate": 22050},  # TODO: don't hardcode this
 
 
 class HifiGANApply:
@@ -291,17 +285,14 @@ class HifiGANApply:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "mels": ("MEL_TENSOR",),
-                "model": ("HG_MODEL",),
+                "mels": ("MELS",),
+                "model": ("HIFIGAN_MODEL",),
                 "denoiser_strength": ("FLOAT", {"default": 0.06, "min": 0.0, "step": 0.001}),
             },
         }
 
-    RETURN_NAMES = ("raw_audio",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
-
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "apply"
-
     CATEGORY = "audio"
 
     def apply(self, mels, model, denoiser_strength: float = 0.06):
@@ -323,14 +314,14 @@ class HifiGANApply:
 
             if denoiser_strength != 0.0:
                 audio *= MAX_WAV_VALUE
-                audio = dn(audio.squeeze(1), denoiser_strength) 
+                audio = dn(audio.squeeze(1), denoiser_strength)
                 audio /= MAX_WAV_VALUE
 
-            audio = list(audio.cpu().unbind(0))
+            audio = audio.cpu()
             hg.device = dn.device = prev_device
 
         do_cleanup()
-        return audio,
+        return {"waveform": audio, "sample_rate": cfg.sample_rate},
 
 
 class ToMelSpectrogram:
@@ -338,8 +329,7 @@ class ToMelSpectrogram:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio": ("AUDIO_TENSOR",),
-                "sample_rate": ("INT", {"default": 22050, "min": 1, "max": BIGINT}),
+                "audio": ("AUDIO",),
                 "n_fft": ("INT", {"default": 1024, "min": 1, "max": BIGINT}),
                 "n_mels": ("INT", {"default": 80, "min": 1}),
                 "hop_len": ("INT", {"default": 256, "min": 1, "max": BIGINT}),
@@ -349,17 +339,15 @@ class ToMelSpectrogram:
             },
         }
 
-    RETURN_NAMES = ("mels",)
-    RETURN_TYPES = ("MEL_TENSOR",)
-
+    RETURN_TYPES = ("MELS",)
     FUNCTION = "apply"
-
     CATEGORY = "audio"
 
-    def apply(self, audio, sample_rate: int, n_fft: int, n_mels: int, hop_len: int, win_len: int, fmin: int, fmax: int):
+    def apply(self, audio, n_fft: int, n_mels: int, hop_len: int, win_len: int, fmin: int, fmax: int):
+        sample_rate = audio["sample_rate"]
         with torch.no_grad():
-            mels = [mel_spectrogram(clip, n_fft, n_mels, sample_rate, hop_len, win_len, fmin, fmax) for clip in audio]
-            mels = torch.cat(mels)
+            mels = [mel_spectrogram(clip, n_fft, n_mels, sample_rate, hop_len, win_len, fmin, fmax) for clip in audio["waveform"].unbind(0)]
+            mels = torch.cat(mels, 0)
 
         do_cleanup()
         return mels,
@@ -369,14 +357,12 @@ class HifiGANModelParams:
     @classmethod
     def INPUT_TYPES(cls):
         return {
-            "required": {"model": ("HG_MODEL",)},
+            "required": {"model": ("HIFIGAN_MODEL",)},
         }
 
     RETURN_NAMES = ("sr", "n_mels", "n_fft", "hop_len", "win_len", "fmin", "fmax")
     RETURN_TYPES = ("INT", "INT", "INT", "INT", "INT", "INT", "INT")
-
     FUNCTION = "get"
-
     CATEGORY = "audio"
 
     def get(self, model):

@@ -20,8 +20,7 @@ class MusicgenHFLoader:
     def INPUT_TYPES(cls):
         return {"required": {"model_name": (MODEL_NAMES,)}}
 
-    RETURN_NAMES = ("MODEL", "PROCESSOR", "SR")
-    RETURN_TYPES = ("MUSICGEN_HF_MODEL", "MUSICGEN_HF_PROC", "INT")
+    RETURN_TYPES = ("MUSICGEN_HF_MODEL",)
     FUNCTION = "load"
     CATEGORY = "audio"
 
@@ -37,8 +36,7 @@ class MusicgenHFLoader:
         model_name = "facebook/" + model_name
         self.processor = MusicgenProcessor.from_pretrained(model_name)
         self.model = MusicgenForConditionalGeneration.from_pretrained(model_name)
-        sr = self.model.config.audio_encoder.sampling_rate
-        return self.model, self.processor, sr
+        return (self.model, self.processor),
 
 
 MILLISECONDS_PER_TOKEN = 20
@@ -50,7 +48,6 @@ class MusicgenHFGenerate:
         return {
             "required": {
                 "model": ("MUSICGEN_HF_MODEL",),
-                "processor": ("MUSICGEN_HF_PROC",),
                 "text": ("STRING", {"multiline": True, "default": ""}),
                 "batch_size": ("INT", {"default": 1, "min": 1}),
                 "duration": ("FLOAT", {"default": 10.0, "min": 1.0, "max": 300.0, "step": 0.01}),
@@ -60,18 +57,16 @@ class MusicgenHFGenerate:
                 "temperature": ("FLOAT", {"default": 1.0, "min": 0.001, "max": 10.0, "step": 0.001}),
                 "seed": ("INT", {"default": 0, "min": 0}),
             },
-            "optional": {"audio": ("AUDIO_TENSOR",)},
+            "optional": {"audio": ("AUDIO",)},
         }
 
-    RETURN_NAMES = ("RAW_AUDIO",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "generate"
     CATEGORY = "audio"
 
     def generate(
         self,
-        model: MusicgenForConditionalGeneration,
-        processor: MusicgenProcessor,
+        model: tuple[MusicgenForConditionalGeneration, MusicgenProcessor],
         text: str = "",
         batch_size: int = 1,
         duration: float = 10.0,
@@ -83,8 +78,7 @@ class MusicgenHFGenerate:
         audio: Optional[torch.Tensor] = None,
     ):
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        sr = model.config.audio_encoder.sampling_rate
-        # model = model.to(device)
+        sr = model[0].config.audio_encoder.sampling_rate
 
         # empty string = unconditional generation
         if text == "":
@@ -94,8 +88,8 @@ class MusicgenHFGenerate:
 
         with (
             torch.random.fork_rng(),
-            obj_on_device(processor, dst=device, verbose_move=True) as p,
-            on_device(model, dst=device) as m,
+            obj_on_device(model[1], dst=device, verbose_move=True) as p,
+            on_device(model[0], dst=device) as m,
         ):
             torch.manual_seed(seed)
 
@@ -103,7 +97,7 @@ class MusicgenHFGenerate:
             if audio is not None or text is not None:
                 text_input = [text] * batch_size if text is not None else text
                 audio_input = (
-                    [x.squeeze().numpy() for x in audio] if audio is not None else audio
+                    [x.squeeze().numpy() for x in audio["waveform"]] if audio is not None else audio
                 )
                 inputs = p(
                     text=text_input,
@@ -112,8 +106,12 @@ class MusicgenHFGenerate:
                     padding=True,
                     return_tensors="pt",
                 )
+                print(inputs)
             else:
+                m: MusicgenForConditionalGeneration
                 inputs = m.get_unconditional_inputs(batch_size)
+                inputs.encoder_outputs = inputs.encoder_outputs[0]  # wacky crap
+                print(inputs)
                 cfg = inputs.guidance_scale
 
             # move to device, remove redundant guidance scale
@@ -132,11 +130,10 @@ class MusicgenHFGenerate:
             inputs = tensors_to_cpu(inputs)
             del inputs
 
-        # model = model.cpu()
-        samples = samples.cpu().unsqueeze(1) if samples.dim == 2 else samples.cpu()
+        samples = samples.unsqueeze(1) if samples.dim == 2 else samples
         do_cleanup()
 
-        return samples,
+        return {"waveform": samples.cpu(), "sample_rate": model[0].config.audio_encoder.sampling_rate},
 
 
 # A dictionary that contains all nodes you want to export with their names

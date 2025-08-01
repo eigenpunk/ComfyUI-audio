@@ -3,7 +3,7 @@ from typing import Optional, Union
 import torch
 from audiocraft.models import AudioGen, MusicGen
 
-from .util import do_cleanup, object_to, obj_on_device, stack_audio_tensors, tensors_to, tensors_to_cpu
+from .util import do_cleanup, object_to, obj_on_device, tensors_to, tensors_to_cpu
 
 
 MODEL_NAMES = [
@@ -12,12 +12,11 @@ MODEL_NAMES = [
     "musicgen-melody",
     "musicgen-large",
     "musicgen-melody-large",
-    # TODO: stereo models seem not to be working out of the box
-    # "musicgen-stereo-small",
-    # "musicgen-stereo-medium",
-    # "musicgen-stereo-melody",
-    # "musicgen-stereo-large",
-    # "musicgen-stereo-melody-large",
+    "musicgen-stereo-small",
+    "musicgen-stereo-medium",
+    "musicgen-stereo-melody",
+    "musicgen-stereo-large",
+    "musicgen-stereo-melody-large",
     "audiogen-medium",
 ]
 
@@ -31,7 +30,6 @@ class MusicgenLoader:
     def INPUT_TYPES(s):
         return {"required": {"model_name": (MODEL_NAMES,)}}
 
-    RETURN_NAMES = ("MODEL", "SR")
     RETURN_TYPES = ("MUSICGEN_MODEL", "INT")
     FUNCTION = "load"
     CATEGORY = "audio"
@@ -72,11 +70,10 @@ class MusicgenGenerate:
                 "temperature": ("FLOAT", {"default": 1.0, "min": 0.001, "step": 0.001}),
                 "seed": ("INT", {"default": 0, "min": 0}),
             },
-            "optional": {"audio": ("AUDIO_TENSOR",)},
+            "optional": {"audio": ("AUDIO",)},
         }
 
-    RETURN_NAMES = ("RAW_AUDIO",)
-    RETURN_TYPES = ("AUDIO_TENSOR",)
+    RETURN_TYPES = ("AUDIO",)
     FUNCTION = "generate"
     CATEGORY = "audio"
 
@@ -110,9 +107,6 @@ class MusicgenGenerate:
             text_input = [text] * batch_size
             if audio is not None:
                 # do continuation with input audio and (optional) text prompting
-                if isinstance(audio, list):
-                    # left-padded stacking into batch tensor
-                    audio = stack_audio_tensors(audio)
 
                 if audio.shape[0] < batch_size:
                     # (try to) expand batch if smaller than requested
@@ -132,9 +126,8 @@ class MusicgenGenerate:
 
             audio_out = tensors_to_cpu(audio_out)
 
-        audio_out = torch.unbind(audio_out)
         do_cleanup()
-        return list(audio_out),
+        return {"waveform": audio_out, "sample_rate": model.sample_rate},
 
 
 NODE_CLASS_MAPPINGS = {
