@@ -71,7 +71,8 @@ class Tacotron2Loader:
             "required": {"model_name": (list(MODELS.keys()),),}
         }
 
-    RETURN_TYPES = ("TT2_MODEL",)
+    RETURN_NAMES = ("tt2_model", "sample_rate")
+    RETURN_TYPES = ("TT2_MODEL", "INT")
     FUNCTION = "load"
     CATEGORY = "audio"
 
@@ -93,7 +94,7 @@ class Tacotron2Loader:
         self.model.device = "cpu"
         self.model.eval().half()
 
-        return self.model,
+        return self.model, hparams.sampling_rate,
 
 
 class WaveGlowLoader:

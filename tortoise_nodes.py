@@ -120,7 +120,7 @@ class TortoiseTTSLoader:
             }
         }
 
-    RETURN_NAMES = ("model", "sr")
+    RETURN_NAMES = ("tortoise_tts_model", "sample_rate")
     RETURN_TYPES = ("TORTOISE_TTS", "INT")
     FUNCTION = "load"
     CATEGORY = "audio"

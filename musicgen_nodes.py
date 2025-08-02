@@ -30,6 +30,7 @@ class MusicgenLoader:
     def INPUT_TYPES(s):
         return {"required": {"model_name": (MODEL_NAMES,)}}
 
+    RETURN_NAMES = ("musicgen_model", "sample_rate")
     RETURN_TYPES = ("MUSICGEN_MODEL", "INT")
     FUNCTION = "load"
     CATEGORY = "audio"

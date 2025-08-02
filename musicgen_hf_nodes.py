@@ -20,7 +20,8 @@ class MusicgenHFLoader:
     def INPUT_TYPES(cls):
         return {"required": {"model_name": (MODEL_NAMES,)}}
 
-    RETURN_TYPES = ("MUSICGEN_HF_MODEL",)
+    RETURN_NAMES = ("musicgen_hf_model", "sample_rate")
+    RETURN_TYPES = ("MUSICGEN_HF_MODEL", "INT")
     FUNCTION = "load"
     CATEGORY = "audio"
 

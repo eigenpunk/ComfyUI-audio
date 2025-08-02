@@ -130,7 +130,7 @@ class VALLEXLoader:
     def INPUT_TYPES(cls):
         return {"required": {}}
 
-    RETURN_NAMES = ("model", "sr")
+    RETURN_NAMES = ("vallex_model", "sample_rate")
     RETURN_TYPES = ("VALLEX_MODEL", "INT")
     FUNCTION = "load"
     CATEGORY = "audio"

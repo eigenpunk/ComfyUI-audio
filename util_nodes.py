@@ -490,14 +490,17 @@ class CombineImageWithAudio:
 
             subprocess.run(proc_args)
 
-            d = {"subfolder": subdir, "type": self.output_type}
             audio_results.append({
-                **d, "filename": f"{name}.wav", "format": "audio/wav",
+               "filename": f"{name}.wav",
+               "format": "audio/wav",
+               "subfolder": subdir,
+               "type": "temp",
             })
             video_results.append({
-                **d,
                 "filename": f"{name}.{file_format}",
                 "format": "video/webm" if file_format == "webm" else "video/mpeg",
+                "subfolder": subdir,
+                "type": "output",
             })
             count += 1
 
@@ -559,6 +562,23 @@ class TrimSilence:
         return {"waveform": trimmed_clip, "sample_rate": audio["sample_rate"]},
 
 
+class AudioSampleRate:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "audio": ("AUDIO",),
+            }
+        }
+
+    FUNCTION = "get_sample_rate"
+    RETURN_TYPES = ("INT",)
+    CATEGORY = "audio"
+
+    def trim(self, audio):
+        return audio["sample_rate"],
+
+
 NODE_CLASS_MAPPINGS = {
     "ConvertAudio": ConvertAudio,
     "FilterAudio": FilterAudio,
@@ -576,6 +596,7 @@ NODE_CLASS_MAPPINGS = {
     "ApplyVoiceFixer": ApplyVoiceFixer,
     "TrimSilence": TrimSilence,
     "NormalizeAudio": NormalizeAudio,
+    "AudioSampleRate": AudioSampleRate,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -595,4 +616,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ApplyVoiceFixer": "Apply VoiceFixer",
     "TrimSilence": "Trim Silence",
     "NormalizeAudio": "Normalize Audio",
+    "AudioSampleRate": "Get Audio Sample Rate",
 }
