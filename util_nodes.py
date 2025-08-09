@@ -456,48 +456,49 @@ class CombineImageWithAudio:
     def save_image_with_audio(self, image, audio, file_format, filename_prefix):
         filename_prefix += self.prefix_append
         sr = audio["sample_rate"]
-        dur = audio["waveform"][0].shape[-1] // sr
-        channels = audio["waveform"][0].shape[-2]
         full_outdir, base_fname, count, subdir, filename_prefix = get_save_image_path(
-            filename_prefix, self.output_dir, dur, channels
+            filename_prefix, self.output_dir
         )
 
         audio_results = []
         video_results = []
 
         for image_tensor, clip in zip(image, audio["waveform"]):
-            name = f"{base_fname}_{count:05}.wav"
+            name = f"{base_fname}_{count:05}_"
             tmp_dir = get_temp_directory()
-            stem_name = os.path.join(tmp_dir, name)
-            torchaudio.save(stem_name, clip, sr, format="wav")
-            audio_path = stem_name
+
+            wav_basename = f"{name}.wav"
+            wav_fname = os.path.join(full_outdir, wav_basename)
+            torchaudio.save(wav_fname, clip, sr, format="wav")
 
             image = image_tensor.mul(255.0).clip(0, 255).byte().numpy()
             image = Image.fromarray(image)
 
-            image_path = os.path.join(tmp_dir, f"{name}.png")
-            image.save(image_path, compress_level=4)
+            image_basename = f"{name}.png"
+            image_fname = os.path.join(tmp_dir, image_basename)
+            image.save(image_fname, compress_level=4)
 
-            video_path = os.path.join(full_outdir, f"{name}.{file_format}")
+            video_basename = f"{name}.{file_format}"
+            video_fname = os.path.join(full_outdir, video_basename)
 
             proc_args = [
-                shutil.which("ffmpeg"), "-y", "-i", image_path, "-i", str(audio_path)
+                shutil.which("ffmpeg"), "-y", "-i", image_fname, "-i", str(wav_fname)
             ]
             if file_format == "webm":
-                proc_args += ["-c:v", "vp8", "-c:a", "opus", "-strict", "-2", video_path]
+                proc_args += ["-c:v", "vp8", "-c:a", "opus", "-strict", "-2", video_fname]
             else:  # file_format == "mp4"
-                proc_args += ["-pix_fmt", "yuv420p", video_path]
+                proc_args += ["-pix_fmt", "yuv420p", video_fname]
 
             subprocess.run(proc_args)
 
             audio_results.append({
-               "filename": f"{name}.wav",
+               "filename": wav_basename,
                "format": "audio/wav",
                "subfolder": subdir,
-               "type": "temp",
+               "type": "output",
             })
             video_results.append({
-                "filename": f"{name}.{file_format}",
+                "filename": video_basename,
                 "format": "video/webm" if file_format == "webm" else "video/mpeg",
                 "subfolder": subdir,
                 "type": "output",
@@ -575,7 +576,7 @@ class AudioSampleRate:
     RETURN_TYPES = ("INT",)
     CATEGORY = "audio"
 
-    def trim(self, audio):
+    def get_sample_rate(self, audio):
         return audio["sample_rate"],
 
 

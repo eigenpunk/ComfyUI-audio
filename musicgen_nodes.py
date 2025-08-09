@@ -89,7 +89,7 @@ class MusicgenGenerate:
         top_p: float = 0.0,
         temperature: float = 1.0,
         seed: int = 0,
-        audio: Optional[torch.Tensor] = None,
+        audio = None,
     ):
         device = "cuda" if torch.cuda.is_available() else "cpu"
         # empty string = unconditional generation
@@ -108,15 +108,16 @@ class MusicgenGenerate:
             text_input = [text] * batch_size
             if audio is not None:
                 # do continuation with input audio and (optional) text prompting
+                audio_in = audio["waveform"]
 
-                if audio.shape[0] < batch_size:
+                if audio_in.shape[0] < batch_size:
                     # (try to) expand batch if smaller than requested
-                    audio = audio.expand(batch_size, -1, -1)
-                elif audio.shape[0] > batch_size:
+                    audio_in = audio_in.expand(batch_size, -1, -1)
+                elif audio_in.shape[0] > batch_size:
                     # truncate batch if larger than requested
-                    audio = audio[:batch_size]
+                    audio_in = audio_in[:batch_size]
 
-                audio_input = tensors_to(audio, device)
+                audio_input = tensors_to(audio_in, device)
                 audio_out = m.generate_continuation(audio_input, model.sample_rate, text_input, progress=True)
             elif text is not None:
                 # do text-to-music
