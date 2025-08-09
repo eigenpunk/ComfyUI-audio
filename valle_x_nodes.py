@@ -307,9 +307,6 @@ class VALLEXVoicePromptGenerator:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         wav_pr = audio["waveform"]
 
-        print(wav_pr)
-        print(wav_pr.shape)
-
         if wav_pr.size(0) == 2:
             wav_pr = wav_pr.mean(0, keepdim=True)
 
