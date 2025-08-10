@@ -51,6 +51,14 @@ FILTER_WINDOWS = {
 MAX_WAV_VALUE = 32768.0
 
 
+def find_end_of_clip(x):
+    x_mono = x.sum(dim=0)
+    k = len(x_mono) - 1
+    while k > 0 and x_mono[k] == 0.0:
+        k -= 1
+    return k + 1
+
+
 class NormalizeAudio:
     @classmethod
     def INPUT_TYPES(cls):
@@ -327,8 +335,9 @@ class SpectrogramImage:
         waveform_batch = audio["waveform"]
         results = []
         for clip in waveform_batch:
+            end_sample = find_end_of_clip(clip)
             spectro = TAF.spectrogram(
-                clip,
+                clip[..., :end_sample],
                 0,
                 window=hann_window(win_len),
                 n_fft=n_fft,
@@ -474,13 +483,6 @@ class CombineImageWithAudio:
 
         audio_results = []
         video_results = []
-
-        def find_end_of_clip(x):
-            x_mono = x.sum(dim=0)
-            k = len(x_mono) - 1
-            while k > 0 and x_mono[k] == 0.0:
-                k -= 1
-            return k + 1
 
         waveform = audio["waveform"]
         for image_tensor, clip in zip(image, waveform):
