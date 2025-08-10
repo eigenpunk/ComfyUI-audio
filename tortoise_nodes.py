@@ -241,8 +241,13 @@ class TortoiseTTSGenerate:
                 **diffusion_kwargs,
             )
 
-            if isinstance(model, TextToSpeech):
-                audio_out = [x[0] for x in audio_out]
+            if isinstance(audio_out, list):
+                lengths = [x.shape[-1] for x in audio_out]
+                max_len = max(lengths)
+                audio_out = [F.pad(x, [0, max_len - x.shape[-1]]) for x in audio_out]
+                audio_out = torch.cat(audio_out, dim=0)
+            else:
+                audio_out = audio_out.view(1, 1, -1)
 
             m.device = prev_device
 

@@ -475,6 +475,13 @@ class CombineImageWithAudio:
         audio_results = []
         video_results = []
 
+        def find_end_of_clip(x):
+            x_mono = x.sum(dim=0)
+            k = len(x_mono) - 1
+            while k > 0 and x_mono[k] == 0.0:
+                k -= 1
+            return k + 1
+
         waveform = audio["waveform"]
         for image_tensor, clip in zip(image, waveform):
             name = f"{base_fname}_{count:05}_"
@@ -482,7 +489,8 @@ class CombineImageWithAudio:
 
             wav_basename = f"{name}.wav"
             wav_fname = os.path.join(full_outdir, wav_basename)
-            torchaudio.save(wav_fname, clip, sr, format="wav")
+            end_sample = find_end_of_clip(clip)
+            torchaudio.save(wav_fname, clip[..., :end_sample], sr, format="wav")
 
             image = image_tensor.mul(255.0).clip(0, 255).byte().numpy()
             image = Image.fromarray(image)
