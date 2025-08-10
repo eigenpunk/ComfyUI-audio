@@ -299,6 +299,8 @@ class SpectrogramImage:
                 "power": ("FLOAT", {"default": 1.0}),
                 "normalized": ("BOOLEAN", {"default": False}),
                 "logy": ("BOOLEAN", {"default": True}),
+                "width": ("INT", {"default": 640, "min": 0}),
+                "height": ("INT", {"default": 320, "min": 0}),
             },
         }
 
@@ -307,36 +309,46 @@ class SpectrogramImage:
     OUTPUT_NODE = True
     CATEGORY = "audio"
 
-    def make_spectrogram(self, audio, n_fft=400, hop_len=50, win_len=100, power=1.0, normalized=False, logy=True):
+    def make_spectrogram(
+        self,
+        audio,
+        n_fft=400,
+        hop_len=50,
+        win_len=100,
+        power=1.0,
+        normalized=False,
+        logy=True,
+        width=640,
+        height=320,
+    ):
         hop_len = n_fft // 4 if hop_len == 0 else hop_len
         win_len = n_fft if win_len == 0 else win_len
 
-        clip = audio["waveform"]
-
-        print("clip", clip.shape)
-
-        spectro = TAF.spectrogram(
-            clip,
-            0,
-            window=hann_window(win_len),
-            n_fft=n_fft,
-            hop_length=hop_len,
-            win_length=win_len,
-            power=power,
-            normalized=normalized,
-            center=True,
-            pad_mode="reflect",
-            onesided=True,
-        )  # yields an Nx1xCxT tensor
-        spectro = spectro[:, 0, ...].flip(1)  # NxCxT
-        print("spectro", spectro.shape)
-        if logy:
-            n, c, t = spectro.shape
-            spectro = spectro.permute(0, 2, 1).flatten(0, 1).T.numpy()
-            spectro = clip.new_tensor(logyscale(spectro))
-            spectro = spectro.T.reshape(n, t, c).permute(0, 2, 1)
-
-        results = spectro[..., None].expand(-1, -1, -1, 3)
+        waveform_batch = audio["waveform"]
+        results = []
+        for clip in waveform_batch:
+            spectro = TAF.spectrogram(
+                clip,
+                0,
+                window=hann_window(win_len),
+                n_fft=n_fft,
+                hop_length=hop_len,
+                win_length=win_len,
+                power=power,
+                normalized=normalized,
+                center=True,
+                pad_mode="reflect",
+                onesided=True,
+            )  # yields a 1xCxT tensor
+            spectro = spectro[0].squeeze().flip(0)  # CxT
+            if logy:
+                spectro = clip.new_tensor(logyscale(spectro.numpy()))
+            results.append(
+                torch.nn.functional.interpolate(spectro[None, None], (height, width), mode="bilinear")
+                if width != 0 and height != 0
+                else spectro[None, None]
+            )
+        results = torch.cat(results, dim=0).permute(0, 2, 3, 1).expand(-1, -1, -1, 3)
         return results,
 
 
@@ -463,7 +475,8 @@ class CombineImageWithAudio:
         audio_results = []
         video_results = []
 
-        for image_tensor, clip in zip(image, audio["waveform"]):
+        waveform = audio["waveform"]
+        for image_tensor, clip in zip(image, waveform):
             name = f"{base_fname}_{count:05}_"
             tmp_dir = get_temp_directory()
 

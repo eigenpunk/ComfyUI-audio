@@ -241,15 +241,13 @@ class TortoiseTTSGenerate:
                 **diffusion_kwargs,
             )
 
-            lengths = [x.shape[-1] for x in audio_out]
-            max_len = max(lengths)
-            audio_out = [F.pad(x, [0, max_len - x.shape[-1]]) for x in audio_out]
-            audio_out = torch.cat(audio_out, dim=0)
+            if isinstance(model, TextToSpeech):
+                audio_out = [x[0] for x in audio_out]
 
             m.device = prev_device
 
         do_cleanup()
-        return {"waveform": audio_out, "length": lengths, "sample_rate": 24000},
+        return {"waveform": audio_out, "sample_rate": 24000},
 
 
 NODE_CLASS_MAPPINGS = {
